@@ -17,5 +17,4 @@
   match production.
 
 What it does not give you is the MTA's own quirks: the NYCT protobuf extension,
-unusual enum values, the occasional malformed entity. See
-`docs/limitations.md`.
+unusual enum values, the occasional malformed entity.

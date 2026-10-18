@@ -103,9 +103,6 @@ This exercises `KafkaSink`: `acks=all`, `enable.idempotence=true`,
 counts permanent failures. `records_failed` includes anything still in flight
 after the flush timeout, so a partial delivery cannot be reported as a success.
 
-Not measured here: the number from a real MSK cluster across an AZ boundary,
-which is the configuration `infra/` describes. See [limitations.md](limitations.md).
-
 ## What the benchmark does not prove
 
 - It does not prove Spark keeps up at 2,000 events/sec. The streaming job's

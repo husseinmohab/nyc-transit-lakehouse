@@ -11,6 +11,6 @@
 | `terraform.yml` / `validate` | `infra/**` changes | `terraform fmt -check`, `init -backend=false`, `validate`, plus a standalone `validate` per module. |
 | `terraform.yml` / `tflint` | `infra/**` changes | advisory lint, non-blocking. |
 
-No workflow has AWS credentials, and none applies Terraform. `terraform validate`
-runs with `-backend=false`. See `docs/limitations.md` for what that does and does
-not verify.
+No workflow has AWS credentials and none applies Terraform. `terraform validate`
+runs with `-backend=false`, so it checks syntax, types and module wiring without
+reaching an account.
