@@ -1,0 +1,9 @@
+# dbt_utils supplies the generic tests this project leans on most:
+# unique_combination_of_columns (grain assertions), expression_is_true
+# (cross-column invariants), accepted_range, and not_null_proportion.
+#
+# Pinned to an exact version: a dbt test suite whose assertions can change
+# under you on `dbt deps` is not a contract.
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.0

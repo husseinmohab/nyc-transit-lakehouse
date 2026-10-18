@@ -1,0 +1,86 @@
+version: 2
+
+sources:
+  - name: lakehouse
+    description: >
+      The Iceberg silver layer written by the Spark Structured Streaming jobs
+      (src/nyc_transit/streaming). Against the `spark` target these are the
+      real Iceberg tables; against the `duckdb` target the identifiers resolve
+      to the committed seeds, which are generated from the same canonical
+      records by scripts/generate_dbt_seeds.py. The models are identical
+      either way -- that is the point of the two targets.
+    schema: "{{ var('silver_schema', target.schema) }}"
+    tables:
+      - name: silver_trip_stop_predictions
+        identifier: "{{ var('rel_trip_stop_predictions', 'silver_trip_stop_predictions') }}"
+        description: One row per (trip, stop, feed publication). Deduplicated on event_id.
+        loaded_at_field: feed_timestamp
+        freshness:
+          # Mirrors the CRITICAL SLA in nyc_transit.quality.freshness for
+          # silver.trip_stop_predictions (420s). dbt's own freshness check is a
+          # second, independent enforcement point so a broken Airflow task
+          # cannot silently disable the gate.
+          warn_after: {count: 7, period: minute}
+          error_after: {count: 20, period: minute}
+        columns:
+          - name: event_id
+            description: blake2b-128 hash of the business key; the MERGE dedup key.
+            tests:
+              - not_null
+              - unique
+          - name: service_date
+            description: GTFS service date in America/New_York; the partition column.
+            tests:
+              - not_null
+          - name: feed_timestamp_ms
+            description: Publication instant in epoch ms; the version column for dedup.
+            tests:
+              - not_null
+
+      - name: silver_vehicle_positions
+        identifier: "{{ var('rel_vehicle_positions', 'silver_vehicle_positions') }}"
+        description: One row per vehicle position report.
+        loaded_at_field: reported_at
+        freshness:
+          warn_after: {count: 7, period: minute}
+          error_after: {count: 20, period: minute}
+        columns:
+          - name: event_id
+            tests:
+              - not_null
+              - unique
+          - name: service_date
+            tests:
+              - not_null
+
+      - name: silver_alert_informed_entities
+        identifier: "{{ var('rel_alert_informed_entities', 'silver_alert_informed_entities') }}"
+        description: Service alerts exploded to one row per informed entity.
+        columns:
+          - name: alert_event_id
+            tests:
+              - not_null
+
+  - name: gtfs_static
+    description: >
+      Static GTFS reference data. Locally this is the curated subset committed
+      as seeds (26 routes, 60 stations); in production the dbt `spark` target
+      points at the full stops.txt/routes.txt loaded from S3. See
+      docs/limitations.md -- the join-coverage tests assert a threshold rather
+      than 100%, because the local subset is a subset.
+    schema: "{{ var('static_schema', target.schema) }}"
+    tables:
+      - name: gtfs_routes
+        identifier: "{{ var('rel_gtfs_routes', 'gtfs_routes') }}"
+        columns:
+          - name: route_id
+            tests:
+              - not_null
+              - unique
+      - name: gtfs_stops
+        identifier: "{{ var('rel_gtfs_stops', 'gtfs_stops') }}"
+        columns:
+          - name: stop_id
+            tests:
+              - not_null
+              - unique

@@ -1,0 +1,416 @@
+version: 2
+
+models:
+  - name: dim_route
+    description: >
+      Route dimension (SCD Type 1) joining static GTFS attributes to observed
+      realtime activity. Activity columns are as-of-last-build, not history.
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('stg_gtfs_routes')
+                field: route_id
+      - name: route_short_name
+        tests:
+          - not_null
+      - name: route_mode
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["subway", "rail", "other"]
+      - name: prediction_count
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: has_realtime_data
+        tests:
+          - not_null
+      - name: active_service_date_count
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+    tests:
+      - dbt_utils.expression_is_true:
+          config:
+            severity: error
+
+          arguments:
+            expression: >
+              (has_realtime_data = false and prediction_count = 0)
+              or (has_realtime_data = true and prediction_count > 0)
+  - name: dim_stop
+    description: Station dimension at parent-station grain.
+    columns:
+      - name: stop_id
+        tests:
+          - not_null
+          - unique
+      - name: stop_name
+        tests:
+          - not_null
+      - name: declared_route_count
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: observed_platform_count
+        tests:
+          - dbt_utils.accepted_range:
+              config:
+                # A parent station has at most two directional platforms in the
+                # realtime feeds. More means parent_station() mis-parsed an id.
+                severity: error
+              arguments:
+                min_value: 0
+                max_value: 2
+                inclusive: true
+      - name: coordinates_are_plausible
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+  - name: dim_vehicle_assignment
+    description: >
+      SCD Type 2 dimension of vehicle-to-trip assignment. Grain: one row per
+      (vehicle_id, continuous run of identical tracked attributes).
+      Interval convention [valid_from, valid_to).
+    columns:
+      - name: vehicle_assignment_sk
+        description: md5(vehicle_id | version_group | valid_from).
+        tests:
+          - not_null
+          - unique
+      - name: vehicle_id
+        tests:
+          - not_null
+      - name: service_date
+        tests:
+          - not_null
+      - name: route_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_gtfs_routes')
+                field: route_id
+      - name: valid_from
+        tests:
+          - not_null
+      - name: valid_to
+        tests:
+          - not_null
+      - name: is_current
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+                quote: false
+      - name: scd_version
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: observation_count
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: assignment_duration_seconds
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            severity: error
+          arguments:
+            combination_of_columns:
+              - vehicle_id
+              - valid_from
+      - dbt_utils.expression_is_true:
+          config:
+            severity: error
+          arguments:
+            expression: "valid_from < valid_to"
+      - dbt_utils.expression_is_true:
+          config:
+            severity: error
+
+          arguments:
+            expression: >
+              (is_assigned = true and trip_id is not null)
+              or (is_assigned = false and trip_id is null)
+  - name: route_alert_status
+    description: Current alert status per route; the source the snapshot watches.
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+          - unique
+      - name: service_status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["normal", "degraded", "disrupted", "notice"]
+      - name: open_alert_count
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+  - name: fct_trip_stop_prediction
+    description: >
+      Publication-grain fact: one row per (trip, stop, feed publication),
+      with route and station attributes denormalised on.
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: service_date
+        tests:
+          - not_null
+      - name: route_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_route')
+                field: route_id
+      - name: stop_id
+        description: >
+          Parent station. NULL for a cancellation row, which the fact keeps on
+          purpose so cancellations stay countable.
+        tests:
+          - not_null:
+              config:
+                where: "is_cancelled_trip = false"
+          - relationships:
+              arguments:
+                to: ref('dim_stop')
+                field: stop_id
+      - name: horizon_bucket
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["unknown", "past", "0-2min", "2-5min", "5-10min", "10-30min", "30min+"]
+      - name: stop_resolved
+        description: >
+          Whether stop_id joined to dim_stop. NULL for a cancellation, which
+          has no stop to resolve.
+        tests:
+          - not_null:
+              config:
+                where: "stop_id is not null"
+      - name: feed_timestamp
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - service_date
+              - trip_id
+              - platform_stop_id
+              - feed_timestamp_ms
+
+  - name: fct_stop_arrival_estimate
+    description: >
+      One row per (service_date, trip, stop): the MTA's final estimate plus
+      how much it moved while the trip was tracked.
+    columns:
+      - name: trip_stop_sk
+        tests:
+          - not_null
+          - unique
+      - name: service_date
+        tests:
+          - not_null
+      - name: trip_id
+        tests:
+          - not_null
+      - name: platform_stop_id
+        tests:
+          - not_null
+      - name: revision_count
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: distinct_eta_count
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: tracking_duration_seconds
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+    tests:
+      - dbt_utils.expression_is_true:
+          config:
+            severity: error
+          arguments:
+            expression: "distinct_eta_count <= revision_count"
+      - dbt_utils.expression_is_true:
+          config:
+            severity: error
+
+          arguments:
+            expression: "first_feed_timestamp <= final_feed_timestamp"
+  - name: agg_route_service_hourly
+    description: Route x service-date x hour rollup built on trip-stop grain.
+    columns:
+      - name: service_date
+        tests:
+          - not_null
+      - name: route_id
+        tests:
+          - not_null
+      - name: arrival_hour
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 23
+                inclusive: true
+      - name: trip_stop_count
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - service_date
+              - route_id
+              - direction_id
+              - arrival_hour
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "distinct_trip_count <= trip_stop_count"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "skipped_stop_count <= trip_stop_count"
+  - name: dq_pipeline_freshness
+    description: >
+      Per-table row counts, event-time bounds and measured lag. Mirrors the
+      Python probe in nyc_transit.quality.probe.
+    columns:
+      - name: table_name
+        tests:
+          - not_null
+          - unique
+          - accepted_values:
+              arguments:
+                values:
+                  - silver.trip_stop_predictions
+                  - silver.vehicle_positions
+                  - silver.alert_informed_entities
+      - name: row_count
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: max_event_time
+        tests:
+          - not_null
+      - name: partition_count
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: severity
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["critical", "warning"]
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "min_event_time <= max_event_time"
+  - name: dq_prediction_quality_daily
+    description: >
+      Per-route, per-day prediction stability and coverage. Stability, never
+      accuracy -- this pipeline has no ground-truth arrival times.
+    columns:
+      - name: service_date
+        tests:
+          - not_null
+      - name: route_id
+        tests:
+          - not_null
+      - name: trip_stop_count
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: missing_eta_rate
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+      - name: skipped_rate
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+      - name: stability_score
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - service_date
+              - route_id
+
+snapshots:
+  - name: snap_route_alert_status
+    description: SCD2 history of per-route service status, captured by dbt snapshot.
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+      - name: service_status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["normal", "degraded", "disrupted", "notice"]
+      - name: dbt_scd_id
+        tests:
+          - not_null
+          - unique
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - route_id
+              - dbt_valid_from

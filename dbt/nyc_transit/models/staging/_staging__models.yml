@@ -1,0 +1,255 @@
+version: 2
+
+models:
+  - name: stg_trip_stop_predictions
+    description: >
+      Renamed and cast stop-level predictions, with the parent station derived
+      from the platform-level realtime stop id. No rows are dropped here.
+    columns:
+      - name: event_id
+        description: Dedup key carried from the lakehouse.
+        tests:
+          - not_null
+          - unique
+      - name: service_date
+        description: GTFS service date in America/New_York.
+        tests:
+          - not_null
+      - name: platform_stop_id
+        description: >
+          Platform-level stop id exactly as published ("127N"). NULL for a
+          cancellation, which carries no stop_time_updates -- the normalizer
+          still emits one row so the cancellation stays visible downstream.
+        tests:
+          - not_null:
+              config:
+                where: "is_cancelled_trip = false"
+      - name: stop_id
+        description: Parent station id, suffix stripped. NULL for a cancellation.
+        tests:
+          - not_null:
+              config:
+                where: "is_cancelled_trip = false"
+          - relationships:
+              arguments:
+                to: ref('stg_gtfs_stops')
+                field: stop_id
+      - name: route_id
+        description: GTFS route id.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_gtfs_routes')
+                field: route_id
+      - name: platform_direction
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["NORTH", "SOUTH"]
+      - name: stop_sequence
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 300
+                inclusive: true
+      - name: feed_timestamp_ms
+        tests:
+          - not_null
+      - name: is_skipped
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+                quote: false
+      - name: is_cancelled_trip
+        tests:
+          - not_null
+      - name: ingest_lag_seconds
+        description: Producer poll time minus feed publication time.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -120
+                max_value: 900
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            # The declared grain of the whole pipeline. If this fails,
+            # make_event_id and the MERGE key disagree with reality.
+            # Scoped to scheduled trips: a cancellation has a NULL
+            # platform_stop_id, and two cancellations in one publication are
+            # distinct rows that this test cannot tell apart.
+            severity: error
+            where: "is_cancelled_trip = false"
+          arguments:
+            combination_of_columns:
+              - service_date
+              - trip_id
+              - platform_stop_id
+              - feed_timestamp_ms
+  - name: stg_vehicle_positions
+    description: Renamed and cast vehicle positions with an is_assigned flag.
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: service_date
+        tests:
+          - not_null
+      - name: vehicle_id
+        tests:
+          - not_null
+      - name: route_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_gtfs_routes')
+                field: route_id
+      - name: reported_at
+        tests:
+          - not_null
+      - name: latitude
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -90
+                max_value: 90
+      - name: longitude
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -180
+                max_value: 180
+      - name: bearing
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 360
+                inclusive: true
+      - name: current_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["INCOMING_AT", "STOPPED_AT", "IN_TRANSIT_TO"]
+      - name: position_is_plausible
+        tests:
+          - not_null
+      - name: is_assigned
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - vehicle_id
+              - reported_at_ms
+              - feed_id
+
+  - name: stg_alert_informed_entities
+    description: Alerts exploded to one row per informed entity.
+    columns:
+      - name: alert_event_id
+        tests:
+          - not_null
+      - name: service_date
+        tests:
+          - not_null
+      - name: alert_effect
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - NO_SERVICE
+                  - REDUCED_SERVICE
+                  - SIGNIFICANT_DELAYS
+                  - DETOUR
+                  - ADDITIONAL_SERVICE
+                  - MODIFIED_SERVICE
+                  - OTHER_EFFECT
+                  - UNKNOWN_EFFECT
+                  - STOP_MOVED
+                  - NO_EFFECT
+                  - ACCESSIBILITY_ISSUE
+      - name: is_systemwide
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - alert_event_id
+              - informed_ordinal
+
+  - name: stg_gtfs_routes
+    description: Static route reference data.
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+          - unique
+      - name: route_short_name
+        tests:
+          - not_null
+      - name: route_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2]
+                quote: false
+      - name: route_mode
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["subway", "rail", "other"]
+      - name: division
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["IRT", "BMT", "IND", "SIR"]
+      - name: route_color_hex
+        tests:
+          - not_null
+
+  - name: stg_gtfs_stops
+    description: Static station reference data (curated subset -- see docs/limitations.md).
+    columns:
+      - name: stop_id
+        tests:
+          - not_null
+          - unique
+      - name: stop_name
+        tests:
+          - not_null
+      - name: stop_lat
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 40.4
+                max_value: 41.1
+      - name: stop_lon
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -74.3
+                max_value: -73.6
+      - name: borough
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]
+      - name: coordinates_are_plausible
+        tests:
+          - accepted_values:
+              config:
+                # Every curated stop must be inside the NYC bounding box. A
+                # failure means the reference data is wrong, not the feed.
+                severity: error
+              arguments:
+                values: [true]
+                quote: false

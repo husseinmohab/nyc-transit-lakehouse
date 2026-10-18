@@ -1,0 +1,27 @@
+route_id,route_short_name,route_long_name,route_color,route_type,division
+1,1,Broadway - 7 Avenue Local,EE352E,1,IRT
+2,2,7 Avenue Express,EE352E,1,IRT
+3,3,7 Avenue Express,EE352E,1,IRT
+4,4,Lexington Avenue Express,00933C,1,IRT
+5,5,Lexington Avenue Express,00933C,1,IRT
+6,6,Lexington Avenue Local,00933C,1,IRT
+7,7,Flushing Local,B933AD,1,IRT
+GS,S,42 Street Shuttle,808183,1,IRT
+A,A,8 Avenue Express,2850AD,1,IND
+C,C,8 Avenue Local,2850AD,1,IND
+E,E,8 Avenue Local,2850AD,1,IND
+H,S,Rockaway Park Shuttle,808183,1,IND
+FS,S,Franklin Avenue Shuttle,808183,1,BMT
+B,B,6 Avenue Express,FF6319,1,IND
+D,D,6 Avenue Express,FF6319,1,IND
+F,F,Queens Blvd Express / 6 Av Local,FF6319,1,IND
+M,M,QNS BLVD-6 AVE / MYRTLE Local,FF6319,1,IND
+G,G,Brooklyn - Queens Crosstown,6CBE45,1,IND
+J,J,Nassau Street Local,996633,1,BMT
+Z,Z,Nassau Street Express,996633,1,BMT
+L,L,14 St - Canarsie Local,A7A9AC,1,BMT
+N,N,Broadway Express,FCCC0A,1,BMT
+Q,Q,Broadway Express,FCCC0A,1,BMT
+R,R,Broadway Local,FCCC0A,1,BMT
+W,W,Broadway Local,FCCC0A,1,BMT
+SI,SIR,Staten Island Railway,0039A6,2,SIR

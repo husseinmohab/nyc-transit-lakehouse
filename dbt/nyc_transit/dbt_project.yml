@@ -1,0 +1,99 @@
+name: "nyc_transit"
+version: "0.3.0"
+config-version: 2
+
+profile: "nyc_transit"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# `service_date` is the Iceberg partition column everywhere upstream, so every
+# incremental model is partitioned on it too and every incremental run is
+# partition-scoped, which is what makes a dbt run safe to re-run.
+vars:
+  # Overridden by Airflow: `dbt run --vars '{run_date: "2026-11-01"}'`.
+  run_date: ""
+  # How far back an incremental run reprocesses. The MTA republishes
+  # predictions for a trip for minutes after it ends, and a late-arriving
+  # Kafka batch can land after midnight, so a 1-day lookback would drop rows.
+  incremental_lookback_days: 2
+
+models:
+  nyc_transit:
+    +file_format: iceberg
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +schema: marts
+      core:
+        +materialized: incremental
+      quality:
+        +materialized: table
+
+snapshots:
+  nyc_transit:
+    +target_schema: snapshots
+    +file_format: iceberg
+
+# Seeds land in the target's default schema so the `lakehouse` / `gtfs_static`
+# sources resolve to them on the duckdb target without a per-target override.
+#
+# Explicit column_types everywhere a value LOOKS numeric but is not. GTFS ids
+# are strings: route "1", stop "101", and a seed loader that infers INTEGER
+# silently breaks every join against the realtime data (where the same ids
+# arrive as strings from protobuf). This is the single most load-bearing block
+# in this file.
+seeds:
+  nyc_transit:
+    gtfs_routes:
+      +column_types:
+        route_id: varchar
+        route_short_name: varchar
+        route_long_name: varchar
+        route_color: varchar
+        division: varchar
+    gtfs_stops:
+      +column_types:
+        stop_id: varchar
+        stop_name: varchar
+        borough: varchar
+        served_by_routes: varchar
+    silver_trip_stop_predictions:
+      +column_types:
+        event_id: varchar
+        feed_id: varchar
+        trip_id: varchar
+        route_id: varchar
+        vehicle_id: varchar
+        stop_id: varchar
+        feed_timestamp_ms: bigint
+    silver_vehicle_positions:
+      +column_types:
+        event_id: varchar
+        feed_id: varchar
+        vehicle_id: varchar
+        trip_id: varchar
+        route_id: varchar
+        stop_id: varchar
+        current_status: varchar
+        reported_at_ms: bigint
+    silver_alert_informed_entities:
+      +column_types:
+        alert_event_id: varchar
+        entity_id: varchar
+        agency_id: varchar
+        route_id: varchar
+        stop_id: varchar
+        trip_id: varchar
+        alert_cause: varchar
+        alert_effect: varchar
+        header_text: varchar
+        feed_timestamp_ms: bigint

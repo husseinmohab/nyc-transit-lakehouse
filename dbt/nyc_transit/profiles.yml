@@ -1,0 +1,34 @@
+# Two targets, one model tree.
+#
+# `duckdb` (default) is the local and CI target. It reads the committed seeds, so
+# `dbt build` runs on a laptop with no cluster, no Kafka and no AWS.
+#
+# `spark` is the production target: the identical models compiled against the
+# Iceberg tables through a Spark Thrift Server backed by the Glue catalog.
+# Switching is `dbt build --target spark`; no model changes.
+#
+# A real deployment reads host/credentials from the environment (see
+# docker/.env.example and infra/modules/iam). No secrets live in this file.
+nyc_transit:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', 'target/nyc_transit.duckdb') }}"
+      threads: 4
+      schema: main
+      extensions:
+        - parquet
+
+    spark:
+      type: spark
+      method: thrift
+      host: "{{ env_var('DBT_SPARK_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_SPARK_PORT', '10000') | int }}"
+      user: "{{ env_var('DBT_SPARK_USER', 'dbt') }}"
+      schema: "{{ env_var('DBT_SPARK_SCHEMA', 'marts') }}"
+      threads: 4
+      connect_retries: 3
+      connect_timeout: 30
+      server_side_parameters:
+        spark.sql.catalog.lakehouse: org.apache.iceberg.spark.SparkCatalog

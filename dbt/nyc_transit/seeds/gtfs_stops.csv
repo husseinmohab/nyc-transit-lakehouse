@@ -1,0 +1,61 @@
+stop_id,stop_name,stop_lat,stop_lon,borough,served_by_routes
+101,Van Cortlandt Park-242 St,40.8896,-73.8987,Bronx,1
+120,96 St,40.7939,-73.9723,Manhattan,1|2|3
+127,Times Sq-42 St,40.755,-73.9871,Manhattan,1|2|3|7|N|Q|R|W|GS
+132,14 St,40.7377,-74.0004,Manhattan,1|2|3|F|M|L
+142,South Ferry,40.702,-74.0135,Manhattan,1
+201,Wakefield-241 St,40.9031,-73.8506,Bronx,2
+228,Nostrand Av,40.6699,-73.9502,Brooklyn,2|5
+247,Flatbush Av-Brooklyn College,40.6325,-73.9476,Brooklyn,2|5
+250,Atlantic Av-Barclays Ctr,40.6842,-73.9775,Brooklyn,2|3|4|5|B|D|N|Q|R|W
+401,Woodlawn,40.8862,-73.8784,Bronx,4
+418,125 St,40.8044,-73.9375,Manhattan,4|5|6
+423,86 St,40.7794,-73.9557,Manhattan,4|5|6
+631,Grand Central-42 St,40.7519,-73.9767,Manhattan,4|5|6|7|GS
+635,14 St-Union Sq,40.7349,-73.9897,Manhattan,4|5|6|L|N|Q|R|W
+640,Brooklyn Bridge-City Hall,40.7132,-74.0041,Manhattan,4|5|6
+601,Pelham Bay Park,40.8526,-73.8281,Bronx,6
+701,Flushing-Main St,40.7596,-73.8301,Queens,7
+710,Queensboro Plaza,40.7509,-73.94,Queens,7|N|W
+726,34 St-Hudson Yards,40.7557,-74.0021,Manhattan,7
+A02,Inwood-207 St,40.8683,-73.9199,Manhattan,A
+A15,125 St,40.8113,-73.9524,Manhattan,A|B|C|D
+A24,59 St-Columbus Circle,40.7682,-73.9819,Manhattan,A|B|C|D|1
+A27,42 St-Port Authority Bus Term,40.757,-73.9897,Manhattan,A|C|E
+A31,14 St,40.7404,-74.002,Manhattan,A|C|E|L
+A32,W 4 St-Wash Sq,40.7323,-74.0005,Manhattan,A|B|C|D|E|F|M
+A41,Jay St-MetroTech,40.6923,-73.9873,Brooklyn,A|C|F|R
+A65,Far Rockaway-Mott Av,40.6033,-73.7553,Queens,A
+H11,Rockaway Park-Beach 116 St,40.5781,-73.8358,Queens,H
+E01,World Trade Center,40.7126,-74.0099,Manhattan,E
+D01,Norwood-205 St,40.8748,-73.8788,Bronx,D
+D14,47-50 Sts-Rockefeller Ctr,40.7587,-73.9811,Manhattan,B|D|F|M
+D21,Grand St,40.7183,-73.9937,Manhattan,B|D
+D43,Coney Island-Stillwell Av,40.5775,-73.9812,Brooklyn,D|F|N|Q
+B06,21 St-Queensbridge,40.7542,-73.9421,Queens,F
+F01,Jamaica-179 St,40.7124,-73.7834,Queens,F
+F14,Roosevelt Av-Jackson Hts,40.7465,-73.8913,Queens,E|F|M|R|7
+F25,Bergen St,40.6861,-73.9906,Brooklyn,F|G
+M01,Middle Village-Metropolitan Av,40.7116,-73.8894,Queens,M
+M11,Myrtle Av,40.6975,-73.9354,Brooklyn,M|J|Z
+G22,Court Sq,40.747,-73.9456,Queens,G|E|M|7
+G29,Nassau Av,40.7245,-73.9511,Brooklyn,G
+G36,Church Av,40.6441,-73.9796,Brooklyn,G|F
+J12,Jamaica Center-Parsons/Archer,40.7021,-73.8014,Queens,J|Z|E
+J27,Marcy Av,40.7084,-73.9579,Brooklyn,J|M|Z
+M23,Essex St,40.7184,-73.9879,Manhattan,J|M|Z
+L01,8 Av,40.7398,-74.0025,Manhattan,L
+L06,1 Av,40.7309,-73.9817,Manhattan,L
+L08,Bedford Av,40.7171,-73.9568,Brooklyn,L
+L17,Myrtle-Wyckoff Avs,40.6996,-73.9119,Brooklyn,L|M
+L29,Canarsie-Rockaway Pkwy,40.6464,-73.902,Brooklyn,L
+R01,Astoria-Ditmars Blvd,40.7753,-73.9121,Queens,N|W
+R11,Lexington Av/59 St,40.7625,-73.9676,Manhattan,N|R|W|4|5|6
+R16,Times Sq-42 St,40.7556,-73.987,Manhattan,N|Q|R|W
+R23,Canal St,40.7186,-74.0003,Manhattan,N|Q|R|W
+R31,Atlantic Av-Barclays Ctr,40.684,-73.9777,Brooklyn,N|Q|R|W
+R45,Bay Ridge-95 St,40.6161,-74.0309,Brooklyn,R
+Q05,Brighton Beach,40.5779,-73.9613,Brooklyn,Q|B
+S01,Franklin Av,40.6809,-73.9558,Brooklyn,FS|C
+S31,St George,40.6435,-74.0736,Staten Island,SI
+S09,Tottenville,40.5125,-74.2516,Staten Island,SI
