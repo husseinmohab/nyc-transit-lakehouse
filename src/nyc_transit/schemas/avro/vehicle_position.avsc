@@ -1,0 +1,45 @@
+{
+  "type": "record",
+  "name": "VehiclePosition",
+  "namespace": "info.mta.gtfs.rt.v1",
+  "doc": "One vehicle position report. Grain: (vehicle_id, trip_id, vehicle_timestamp_epoch).",
+  "fields": [
+    {"name": "event_id", "type": "string", "doc": "blake2b-128 over the business key; the dedup key for the Iceberg MERGE."},
+    {"name": "record_type", "type": "string", "doc": "Always 'vehicle_position'."},
+    {"name": "feed_id", "type": "string", "doc": "Source GTFS-RT feed, e.g. nyct-ace."},
+    {"name": "feed_timestamp_ms", "type": "long", "doc": "FeedHeader.timestamp in epoch ms; equals ingest_timestamp_ms when the feed omitted it."},
+    {"name": "ingest_timestamp_ms", "type": "long", "doc": "Producer wall clock at poll time, epoch ms."},
+    {"name": "producer_id", "type": "string", "doc": "Which producer instance emitted this record."},
+    {"name": "schema_version", "type": "int", "default": 1, "doc": "Canonical record schema version; bumped on a breaking field change."},
+
+    {"name": "entity_id", "type": ["null", "string"], "default": null, "doc": "FeedEntity.id exactly as published."},
+    {"name": "is_deleted", "type": "boolean", "default": false, "doc": "FeedEntity.is_deleted; set by incremental feeds to retract an entity."},
+    {"name": "service_date", "type": "string", "doc": "GTFS service date YYYY-MM-DD in America/New_York. Iceberg partition column."},
+
+    {"name": "vehicle_id", "type": ["null", "string"], "default": null},
+    {"name": "vehicle_label", "type": ["null", "string"], "default": null},
+    {"name": "vehicle_timestamp_epoch", "type": ["null", "long"], "default": null, "doc": "Vehicle's own clock; preferred over feed_timestamp for staleness checks."},
+
+    {"name": "latitude", "type": ["null", "double"], "default": null},
+    {"name": "longitude", "type": ["null", "double"], "default": null},
+    {"name": "bearing", "type": ["null", "double"], "default": null},
+    {"name": "speed_mps", "type": ["null", "double"], "default": null},
+
+    {"name": "current_stop_sequence", "type": ["null", "int"], "default": null},
+    {"name": "stop_id", "type": ["null", "string"], "default": null},
+    {"name": "current_status", "type": ["null", "string"], "default": null, "doc": "INCOMING_AT | STOPPED_AT | IN_TRANSIT_TO"},
+    {"name": "congestion_level", "type": ["null", "string"], "default": null},
+    {"name": "occupancy_status", "type": ["null", "string"], "default": null},
+
+    {"name": "trip_id", "type": ["null", "string"], "default": null},
+    {"name": "route_id", "type": ["null", "string"], "default": null},
+    {"name": "direction_id", "type": ["null", "int"], "default": null},
+    {"name": "start_date", "type": ["null", "string"], "default": null},
+    {"name": "start_time", "type": ["null", "string"], "default": null},
+    {"name": "schedule_relationship", "type": ["null", "string"], "default": null},
+
+    {"name": "nyct_train_id", "type": ["null", "string"], "default": null},
+    {"name": "nyct_direction", "type": ["null", "string"], "default": null},
+    {"name": "nyct_is_assigned", "type": ["null", "boolean"], "default": null}
+  ]
+}

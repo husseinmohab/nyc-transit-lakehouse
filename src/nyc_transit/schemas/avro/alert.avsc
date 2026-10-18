@@ -1,0 +1,63 @@
+{
+  "type": "record",
+  "name": "ServiceAlert",
+  "namespace": "info.mta.gtfs.rt.v1",
+  "doc": "One service alert. informed_entity is kept nested so one service change is one row. Grain: (entity_id, payload_fingerprint).",
+  "fields": [
+    {"name": "event_id", "type": "string", "doc": "blake2b-128 over the business key; the dedup key for the Iceberg MERGE."},
+    {"name": "record_type", "type": "string", "doc": "Always 'alert'."},
+    {"name": "feed_id", "type": "string", "doc": "Source GTFS-RT feed, e.g. nyct-ace."},
+    {"name": "feed_timestamp_ms", "type": "long", "doc": "FeedHeader.timestamp in epoch ms; equals ingest_timestamp_ms when the feed omitted it."},
+    {"name": "ingest_timestamp_ms", "type": "long", "doc": "Producer wall clock at poll time, epoch ms."},
+    {"name": "producer_id", "type": "string", "doc": "Which producer instance emitted this record."},
+    {"name": "schema_version", "type": "int", "default": 1, "doc": "Canonical record schema version; bumped on a breaking field change."},
+
+    {"name": "entity_id", "type": ["null", "string"], "default": null, "doc": "FeedEntity.id exactly as published."},
+    {"name": "is_deleted", "type": "boolean", "default": false, "doc": "FeedEntity.is_deleted; set by incremental feeds to retract an entity."},
+    {"name": "service_date", "type": "string", "doc": "GTFS service date YYYY-MM-DD in America/New_York. Iceberg partition column."},
+
+    {"name": "alert_cause", "type": ["null", "string"], "default": null},
+    {"name": "alert_effect", "type": ["null", "string"], "default": null},
+    {"name": "header_text", "type": ["null", "string"], "default": null},
+    {"name": "description_text", "type": ["null", "string"], "default": null},
+    {"name": "url", "type": ["null", "string"], "default": null},
+
+    {
+      "name": "active_periods",
+      "doc": "Windows during which the alert applies; an empty array means 'always'.",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "ActivePeriod",
+          "fields": [
+            {"name": "start_epoch", "type": ["null", "long"], "default": null},
+            {"name": "end_epoch", "type": ["null", "long"], "default": null}
+          ]
+        }
+      },
+      "default": []
+    },
+    {
+      "name": "informed_entities",
+      "doc": "Routes/stops/trips the alert applies to. Exploded downstream by bridge_alert_informed_entity.",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "InformedEntity",
+          "fields": [
+            {"name": "agency_id", "type": ["null", "string"], "default": null},
+            {"name": "route_id", "type": ["null", "string"], "default": null},
+            {"name": "route_type", "type": ["null", "int"], "default": null},
+            {"name": "direction_id", "type": ["null", "int"], "default": null},
+            {"name": "trip_id", "type": ["null", "string"], "default": null},
+            {"name": "stop_id", "type": ["null", "string"], "default": null}
+          ]
+        }
+      },
+      "default": []
+    },
+    {"name": "payload_fingerprint", "type": "string", "doc": "Hash of alert text + informed entities; an MTA in-place edit becomes a new row."}
+  ]
+}
