@@ -7,7 +7,6 @@ reads it when one happens to be importable and writes nulls otherwise
 
 nyct_train_id is a nullable enrichment column and never a join key so silver and
 the marts look the same with or without it
-see docs/limitations.md
 """
 
 from __future__ import annotations

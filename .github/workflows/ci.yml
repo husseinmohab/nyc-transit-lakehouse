@@ -204,9 +204,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate every compose profile
-        # `config` fully interpolates and type-checks the file. It does not
-        # start anything, so this is a syntax and wiring check only -- see
-        # docs/limitations.md for what is and is not verified.
+        # config fully interpolates and type checks the file
+        # it starts nothing so this is a syntax and wiring check
         run: |
           docker compose -f docker/docker-compose.yml config -q
           for profile in airflow bench live tools; do

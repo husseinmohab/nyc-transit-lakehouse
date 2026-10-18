@@ -8,7 +8,7 @@
 # Splitting them matters because of what each one cannot do. The producer holds
 # the only credential exposed to the public internet (it polls api-endpoint.mta.info),
 # so it must not be able to touch the lakehouse. The dbt role runs user-authored
-# SQL, so it must not be able to delete bronze -- bronze is the replay substrate,
+# SQL, so it must not be able to delete bronze. Bronze is the replay substrate
 # and losing it turns a transform bug into permanent data loss.
 #
 # Every policy is resource-scoped. There is no "*" resource on a mutating

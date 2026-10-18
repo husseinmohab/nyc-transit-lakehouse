@@ -45,7 +45,7 @@ SEED_FEEDS = ("nyct-ace", "nyct-numeric", "nyct-l")
 
 
 def routes_for_feed(feed_id: str) -> tuple[str, ...]:
-    """routes a feed carries limited to ones with curated stops
+    """routes a feed carries limited to ones with stops in the snapshot
 
     real feeds carry a fixed set of routes since nyct-l only carries the L
     honouring that keeps the seeded feed_id to route_id relationship realistic which

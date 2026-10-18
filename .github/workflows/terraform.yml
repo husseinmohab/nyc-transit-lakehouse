@@ -32,7 +32,7 @@ jobs:
 
       - name: terraform init (no backend)
         # -backend=false: no remote state, no credentials, nothing to
-        # authenticate against. This job must never need AWS access -- it is a
+        # authenticate against. This job must never need AWS access, it is a
         # configuration check, and giving CI cloud credentials to run it would
         # be a far bigger risk than the check is worth.
         working-directory: infra

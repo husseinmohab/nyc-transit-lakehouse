@@ -170,7 +170,7 @@ bench-kafka: ## End-to-end 2k events/sec into the local Kafka broker (needs `mak
 bench-all: bench bench-ceiling ## Both no-broker benchmarks
 
 # ---------------------------------------------------------------------------
-# Infrastructure (code only -- never applied)
+# Infrastructure
 # ---------------------------------------------------------------------------
 .PHONY: tf-fmt
 tf-fmt: ## terraform fmt -recursive

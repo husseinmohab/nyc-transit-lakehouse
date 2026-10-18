@@ -8,7 +8,6 @@
   you could derive an actual arrival off the last prediction before a STOPPED_AT
   position but that is an estimate and calling an estimate actual is how a data
   product starts lying
-  docs/limitations.md says so
 */
 
 with base as (

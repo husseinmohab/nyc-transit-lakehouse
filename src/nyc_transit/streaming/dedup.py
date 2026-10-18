@@ -4,7 +4,6 @@ the pipeline is at least once delivery with idempotent keyed application which
 gives exactly once effects in the lakehouse
 kafka replays a micro batch with identical content and the merge below applies it
 by event_id so a replay is a no op
-docs/exactly_once.md has the full argument
 
 the ledger in bronze._stream_commits lets a replayed batch get skipped without
 touching the data table

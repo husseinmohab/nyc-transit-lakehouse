@@ -4,8 +4,8 @@ the exactly once claim actually exercised
 these write to a real local iceberg warehouse through the real
 IdempotentMergeWriter then replay the same micro batch and check the table did
 not change
-that is the whole delivery argument in docs/exactly_once.md and it is the one
-claim here worth nothing untested
+that is the whole delivery argument and it is the one claim here worth nothing
+untested
 
 marked iceberg so they skip when pyspark or the iceberg runtime jar is missing
 """

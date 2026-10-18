@@ -137,7 +137,7 @@ _TRIP_COLS: tuple[tuple[str, str, str], ...] = (
     ("start_date", "string", "feed-supplied trip start date YYYY-MM-DD, nullable"),
     ("start_time", "string", "GTFS HH:MM:SS, may exceed 24:00:00"),
     ("schedule_relationship", "string", "trip-level ScheduleRelationship name"),
-    ("nyct_train_id", "string", "NYCT extension, nullable (see docs/limitations.md)"),
+    ("nyct_train_id", "string", "NYCT extension, nullable when uncompiled"),
     ("nyct_direction", "string", "NYCT extension, nullable"),
     ("nyct_is_assigned", "boolean", "NYCT extension, nullable"),
 )
