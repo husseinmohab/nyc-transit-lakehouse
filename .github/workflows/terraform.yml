@@ -1,0 +1,72 @@
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          # No wrapper: it rewrites stdout, which makes `fmt -check` output
+          # harder to read in the log for no benefit here.
+          terraform_wrapper: false
+
+      - name: terraform fmt -check
+        working-directory: infra
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform init (no backend)
+        # -backend=false: no remote state, no credentials, nothing to
+        # authenticate against. This job must never need AWS access -- it is a
+        # configuration check, and giving CI cloud credentials to run it would
+        # be a far bigger risk than the check is worth.
+        working-directory: infra
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        working-directory: infra
+        run: terraform validate -no-color
+
+      - name: Validate each module standalone
+        # The root module can mask a child module's missing `required_providers`
+        # because the root's declaration satisfies it. Validating each module on
+        # its own catches that.
+        run: |
+          for module in infra/modules/*/; do
+            echo "::group::$module"
+            terraform -chdir="$module" init -backend=false -input=false
+            terraform -chdir="$module" validate -no-color
+            echo "::endgroup::"
+          done
+
+  tflint:
+    name: tflint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.53.0
+
+      - name: tflint
+        # Advisory (continue-on-error): tflint's AWS ruleset flags stylistic
+        # issues alongside real ones, and a non-blocking signal that people
+        # read beats a blocking one they learn to bypass.
+        run: tflint --recursive --chdir=infra

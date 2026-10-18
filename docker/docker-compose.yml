@@ -1,0 +1,311 @@
+# Local development stack: Kafka, MinIO, Spark, Airflow, Postgres.
+#
+#   docker compose up -d kafka minio minio-setup   # the minimum for the producer
+#   docker compose up -d                           # everything, including Airflow
+#
+# Nothing here is billable and nothing talks to AWS. MinIO stands in for S3 so
+# the s3a:// code path in src/nyc_transit/streaming/session.py is exercised
+# locally rather than skipped.
+#
+# Kafka runs in KRaft mode (no Zookeeper): one fewer container, and it is what
+# MSK 3.6+ runs too.
+
+name: nyc-transit-lakehouse
+
+x-common-env: &common-env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  LAKEHOUSE_CATALOG_TYPE: hadoop
+  LAKEHOUSE_WAREHOUSE: s3a://lakehouse/warehouse
+  LAKEHOUSE_CHECKPOINT_ROOT: s3a://lakehouse/checkpoints
+  LAKEHOUSE_S3_ENDPOINT: http://minio:9000
+  LAKEHOUSE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  LAKEHOUSE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  AWS_REGION: us-east-1
+  PYTHONUNBUFFERED: "1"
+
+services:
+  # -------------------------------------------------------------------------
+  # Kafka (KRaft)
+  # -------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    hostname: kafka
+    container_name: nyc-kafka
+    ports:
+      # 9092 for host clients (pytest, the producer run on the host),
+      # 29092 for in-network clients. Two listeners because a single
+      # advertised listener cannot be correct for both.
+      - "9092:9092"
+    environment:
+      CLUSTER_ID: nyc-transit-lakehouse-kraft1
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Topics are created explicitly by kafka-setup, matching the Terraform
+      # declaration. Auto-create would hand you default partitioning.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_COMPRESSION_TYPE: lz4
+      KAFKA_HEAP_OPTS: "-Xmx1g -Xms1g"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: nyc-kafka-setup
+    depends_on:
+      kafka:
+        condition: service_healthy
+    # Partition counts mirror infra/variables.tf kafka_topics, scaled to a
+    # single broker (replication-factor 1 instead of 3). Written out one topic
+    # per line rather than as a shell loop so the declaration is diffable
+    # against the Terraform variable it mirrors.
+    command:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        create() {
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists \
+            --topic "$$1" --partitions "$$2" --replication-factor 1 \
+            --config compression.type=lz4 --config retention.ms=86400000
+        }
+        create mta.gtfs.trip_updates.v1 12
+        create mta.gtfs.vehicle_positions.v1 6
+        create mta.gtfs.alerts.v1 3
+        kafka-topics --bootstrap-server kafka:29092 --list
+    restart: "no"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: nyc-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    profiles: ["tools"]
+
+  # -------------------------------------------------------------------------
+  # MinIO: S3-compatible object store for the Iceberg warehouse
+  # -------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: nyc-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - minio-data:/data
+
+  minio-setup:
+    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    container_name: nyc-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c '
+      mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
+      mc mb --ignore-existing local/lakehouse;
+      mc mb --ignore-existing local/lakehouse-logs;
+      mc anonymous set none local/lakehouse;
+      mc ls local;
+      '
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    restart: "no"
+
+  # -------------------------------------------------------------------------
+  # Producer and streaming jobs
+  # -------------------------------------------------------------------------
+  loadgen:
+    build:
+      context: ..
+      dockerfile: docker/spark/Dockerfile
+    container_name: nyc-loadgen
+    depends_on:
+      kafka-setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *common-env
+      PRODUCER_PRODUCER_ID: compose-loadgen-1
+    command: >
+      gtfs-loadgen --target kafka --duration 120 --target-eps 2000
+    # Not started by `docker compose up`: it is a benchmark, run on demand with
+    # `docker compose run --rm loadgen`.
+    profiles: ["bench"]
+
+  producer:
+    build:
+      context: ..
+      dockerfile: docker/spark/Dockerfile
+    container_name: nyc-producer
+    depends_on:
+      kafka-setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *common-env
+      GTFS_ENABLED_FEEDS: subway,alerts
+      GTFS_POLL_INTERVAL_SECONDS: "15"
+      PRODUCER_PRODUCER_ID: compose-producer-1
+    # Polls the real MTA endpoints (no key needed for subway). Requires
+    # outbound internet; use the loadgen profile instead when offline.
+    command: gtfs-producer --target kafka
+    profiles: ["live"]
+
+  spark-streaming:
+    build:
+      context: ..
+      dockerfile: docker/spark/Dockerfile
+    container_name: nyc-spark-streaming
+    depends_on:
+      kafka-setup:
+        condition: service_completed_successfully
+      minio-setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *common-env
+      SPARK_LOCAL_DIRS: /tmp/spark
+    # --create-tables is idempotent (CREATE TABLE IF NOT EXISTS), so the job
+    # can own its own DDL and the stack needs no separate migration step.
+    command: >
+      python -m nyc_transit.streaming.jobs
+      --create-tables --starting-offsets earliest --trigger-seconds 30
+      --local-threads 4
+    volumes:
+      # Maven cache: without it every container restart re-downloads the
+      # Iceberg, Kafka and S3A jars.
+      - ivy-cache:/root/.ivy2
+      - m2-cache:/root/.m2
+
+  # -------------------------------------------------------------------------
+  # Airflow
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: nyc-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    profiles: ["airflow"]
+
+  airflow-init:
+    build:
+      context: ..
+      dockerfile: docker/airflow/Dockerfile
+    container_name: nyc-airflow-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &airflow-env
+      <<: *common-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/project/airflow/dags
+      AIRFLOW__CORE__PLUGINS_FOLDER: /opt/project/airflow/plugins
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__PARALLELISM: "8"
+      # Local dev only. A real deployment generates this per environment and
+      # stores it in Secrets Manager; it is pinned here so Airflow does not
+      # invalidate its own connections on every container rebuild.
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-3Jbg8qZ4nQ7mYwRtVxKpL2sNfHcD5aEuW1oP9iU0jXk=}
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session
+      DBT_TARGET: duckdb
+      DBT_PROFILES_DIR: /opt/project/dbt/nyc_transit
+    volumes: &airflow-volumes
+      - ../airflow/dags:/opt/project/airflow/dags:ro
+      - ../airflow/plugins:/opt/project/airflow/plugins:ro
+      - ../src:/opt/project/src:ro
+      - ../dbt:/opt/project/dbt
+      - airflow-logs:/opt/airflow/logs
+    entrypoint: >
+      /bin/bash -c '
+      airflow db migrate &&
+      airflow users create --username admin --password admin
+        --firstname Mohab --lastname Hussein --role Admin --email admin@example.com
+        || true
+      '
+    restart: "no"
+    profiles: ["airflow"]
+
+  airflow-webserver:
+    build:
+      context: ..
+      dockerfile: docker/airflow/Dockerfile
+    container_name: nyc-airflow-web
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    ports:
+      - "8080:8080"
+    command: airflow webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    profiles: ["airflow"]
+
+  airflow-scheduler:
+    build:
+      context: ..
+      dockerfile: docker/airflow/Dockerfile
+    container_name: nyc-airflow-scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    command: airflow scheduler
+    profiles: ["airflow"]
+
+volumes:
+  kafka-data:
+  minio-data:
+  postgres-data:
+  airflow-logs:
+  ivy-cache:
+  m2-cache:
