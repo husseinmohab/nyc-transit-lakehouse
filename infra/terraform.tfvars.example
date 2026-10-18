@@ -1,0 +1,39 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+#
+# NOTE: nothing in this repository has been applied to an AWS account. The
+# configuration is validated with `terraform fmt -check` and
+# `terraform validate` in CI (see .github/workflows/terraform.yml), which
+# checks syntax, types and module wiring but NOT that AWS accepts it.
+# docs/limitations.md says so plainly.
+
+aws_region  = "us-east-1"
+project     = "nyc-transit-lakehouse"
+environment = "dev"
+
+# Required: MSK needs a VPC and private subnets in >= 2 AZs.
+vpc_id             = "vpc-0123456789abcdef0"
+private_subnet_ids = [
+  "subnet-0123456789abcdef0", # us-east-1a
+  "subnet-0123456789abcdef1", # us-east-1b
+  "subnet-0123456789abcdef2", # us-east-1c
+]
+
+# Who may talk to the brokers. Narrow this to the subnets running the producer
+# and the Spark cluster; 0.0.0.0/0 is rejected by a variable validation.
+allowed_client_cidrs = ["10.0.0.0/16"]
+
+# --- sizing ---------------------------------------------------------------
+# A dev deployment can run a single broker on the smallest instance. Note that
+# replication_factor in kafka_topics must then be lowered to 1, or topic
+# creation fails.
+# msk_broker_count       = 1
+# msk_instance_type      = "kafka.t3.small"
+# msk_ebs_volume_size_gb = 50
+
+# --- storage --------------------------------------------------------------
+# Leave empty to get <project>-<environment>-lakehouse-<random suffix>.
+lakehouse_bucket_name = ""
+
+tags = {
+  Owner = "mohab"
+}
