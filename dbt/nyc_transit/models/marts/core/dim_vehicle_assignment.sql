@@ -1,9 +1,6 @@
 {{
   config(
-    materialized = 'incremental',
-    unique_key = 'vehicle_assignment_sk',
-    incremental_strategy = 'merge' if target.type != 'duckdb' else 'delete+insert',
-    partition_by = ['service_date'] if target.type != 'duckdb' else none,
+    materialized = 'table',
     tags = ['marts', 'scd2', 'dimension']
   )
 }}
@@ -30,6 +27,19 @@
   a snapshot would record when dbt noticed and the history would be an artefact
   of the schedule
   snap_route_alert_status is a snapshot since the mta overwrites alert text
+
+  rebuilt whole and not partition scoped like the facts beside it
+  a run boundary is defined by the observation before it and the interval is
+  closed by the one after so a vehicles version numbering depends on its entire
+  history
+  reading one service date renumbers every run which changes the surrogate key
+  so the old rows are not replaced and it reopens the last run of the day to the
+  sentinel
+  that is two current rows and an overlapping interval and it is what the three
+  scd2 tests caught when this was incremental
+  merging on the surrogate key does not save it either since a run that splits
+  leaves the old key behind with nothing to match it
+  the facts are row grained so they partition cleanly this does not
 */
 
 with positions as (
@@ -46,12 +56,6 @@ with positions as (
         reported_at_ms
     from {{ ref('stg_vehicle_positions') }}
     where vehicle_id is not null
-
-    {% if is_incremental() %}
-      -- Partition-scoped an incremental run only reads and only replaces the
-      -- service dates in its window
-      and {{ incremental_window_predicate('service_date') }}
-    {% endif %}
 
 ),
 

@@ -68,7 +68,7 @@ MTA GTFS-RT (8 subway feeds + alerts)
 
 ## The two SCD2 implementations
 
-### dim_vehicle_assignment: hand-rolled incremental SCD2
+### dim_vehicle_assignment: hand-rolled SCD2
 
 Tracks which trip and route a vehicle is working, including the assigned and
 unassigned transition.
@@ -105,6 +105,17 @@ Four tests in `dbt/nyc_transit/tests/singular/` enforce it: no overlapping
 intervals, contiguous intervals, exactly one current row per vehicle, and every
 observed vehicle present. The first two are both needed, because a history can
 be gap-free and overlapping, or disjoint and gapped.
+
+This one is rebuilt whole, unlike the facts beside it, which are partition
+scoped. It was incremental first and the tests above rejected it. A run
+boundary is defined by the observation before it and the interval is closed by
+the one after, so a vehicle's version numbering depends on its whole history.
+Reading a single service date renumbers every run, which changes the surrogate
+key, so the previous rows for that date are never replaced, and it reopens the
+day's last run to the sentinel. That is an overlapping interval and a second
+current row. Merging on the surrogate key does not rescue it either: a run that
+splits leaves the old key behind with nothing to match it. The facts are row
+grained, so they partition cleanly; this does not.
 
 On the committed seeds the deepest history is 5 versions, including assigned to
 unassigned to reassigned.
