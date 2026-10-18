@@ -1,0 +1,7 @@
+# Installed only inside the Airflow image (docker/airflow/Dockerfile).
+# Kept separate from dev.txt: Airflow's constraint files conflict with the
+# resolver used for the application venv.
+apache-airflow==2.10.5
+apache-airflow-providers-amazon>=8.25
+apache-airflow-providers-apache-spark>=4.8
+apache-airflow-providers-postgres>=5.11

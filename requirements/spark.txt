@@ -1,0 +1,4 @@
+# Spark Structured Streaming jobs. Pinned to the 3.5 line because the Iceberg
+# runtime jar coordinate (iceberg-spark-runtime-3.5_2.12) is Spark-minor-scoped.
+pyspark==3.5.6
+pyarrow>=16.0

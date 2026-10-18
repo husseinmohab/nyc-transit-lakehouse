@@ -1,0 +1,10 @@
+-r base.txt
+-r spark.txt
+-r dbt.txt
+-r quality.txt
+pytest>=8.2
+pytest-cov>=5.0
+ruff>=0.5
+black>=24.4
+mypy>=1.10
+types-protobuf

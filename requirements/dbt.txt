@@ -1,0 +1,5 @@
+# dbt-duckdb is the local/CI target; dbt-spark drives the real Iceberg warehouse
+# through a Spark Thrift Server / Glue-backed session.
+dbt-core>=1.10,<2
+dbt-duckdb>=1.9,<2
+duckdb>=1.0

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nyc-transit-lakehouse"
+version = "0.3.0"
+description = "Real-time MTA GTFS-Realtime lakehouse: Kafka -> Spark Structured Streaming -> Apache Iceberg -> dbt"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mohab Hussein", email = "husseinmohab05@gmail.com" }]
+
+[project.scripts]
+gtfs-producer = "nyc_transit.producer.cli:main"
+gtfs-loadgen = "nyc_transit.producer.loadgen:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nyc_transit = ["schemas/avro/*.avsc"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["dbt/nyc_transit/target", "*_pb2.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RET", "ARG", "PTH"]
+ignore = ["B008", "RET504"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG001", "ARG002"]
+"airflow/dags/*" = ["E402"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "spark: tests that boot a local SparkSession (slow; skipped when pyspark is absent)",
+  "iceberg: tests that write to a local Iceberg warehouse (needs the Iceberg runtime jar)",
+  "dbt: tests that invoke the dbt CLI against the DuckDB target",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["nyc_transit"]
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_ignores = false

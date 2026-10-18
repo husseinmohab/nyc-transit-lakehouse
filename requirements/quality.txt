@@ -1,0 +1,4 @@
+# Great Expectations powers the freshness-SLA gate that Airflow runs after every
+# backfill. Pandas is the execution engine for the validator in local/CI mode.
+great-expectations>=1.0,<2
+pandas>=2.2
