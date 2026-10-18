@@ -40,6 +40,11 @@ _AWS_BUNDLE_VERSION = "2.29.52"
 _HADOOP_AWS_VERSION = "3.3.4"
 
 
+# Pinned like the other coordinates. The 2.x line is the one that ships the
+# IAMClientCallbackHandler the kafka options reference.
+_MSK_IAM_AUTH_VERSION = "2.2.0"
+
+
 def _pyspark_version() -> str:
     try:
         import pyspark
@@ -49,7 +54,13 @@ def _pyspark_version() -> str:
         return "3.5.6"
 
 
-def iceberg_packages(settings: LakehouseSettings, *, with_kafka: bool, with_s3: bool) -> list[str]:
+def iceberg_packages(
+    settings: LakehouseSettings,
+    *,
+    with_kafka: bool,
+    with_s3: bool,
+    with_msk_iam: bool = False,
+) -> list[str]:
     """maven coordinates for spark.jars.packages"""
     spark_version = _pyspark_version()
     scala = settings.scala_version
@@ -59,6 +70,11 @@ def iceberg_packages(settings: LakehouseSettings, *, with_kafka: bool, with_s3: 
     ]
     if with_kafka:
         packages.append(f"org.apache.spark:spark-sql-kafka-0-10_{scala}:{spark_version}")
+        if with_msk_iam:
+            # the login module and callback handler jobs.py names in the kafka
+            # options live in this jar without it the driver fails with
+            # ClassNotFoundException on IAMLoginModule and not with an auth error
+            packages.append(f"software.amazon.msk:aws-msk-iam-auth:{_MSK_IAM_AUTH_VERSION}")
     if with_s3:
         packages.append(f"org.apache.hadoop:hadoop-aws:{_HADOOP_AWS_VERSION}")
         packages.append(f"software.amazon.awssdk:bundle:{_AWS_BUNDLE_VERSION}")
@@ -149,6 +165,7 @@ def build_spark_session(
     *,
     app_name: str = "nyc-transit-lakehouse",
     with_kafka: bool = True,
+    with_msk_iam: bool = False,
     local_threads: str | None = None,
     extra_conf: dict[str, str] | None = None,
 ) -> SparkSession:
@@ -164,7 +181,9 @@ def build_spark_session(
     _pin_worker_interpreter()
 
     with_s3 = bool(settings.s3_endpoint) or settings.warehouse.startswith("s3")
-    packages = iceberg_packages(settings, with_kafka=with_kafka, with_s3=with_s3)
+    packages = iceberg_packages(
+        settings, with_kafka=with_kafka, with_s3=with_s3, with_msk_iam=with_msk_iam
+    )
 
     builder = SparkSession.builder.appName(app_name)
     if local_threads:

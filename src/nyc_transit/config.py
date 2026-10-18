@@ -22,7 +22,13 @@ class KafkaSettings(BaseSettings):
 
     bootstrap_servers: str = "localhost:9092"
     security_protocol: str = "PLAINTEXT"
+    # AWS_MSK_IAM is the name the java client uses and the one to set in env
+    # librdkafka calls the same thing OAUTHBEARER and librdkafka_config
+    # translates it below
     sasl_mechanism: str | None = None
+    # only read when the mechanism is AWS_MSK_IAM the signer needs a region to
+    # build the presigned url it uses as the token
+    aws_region: str | None = None
 
     # Topic names are versioned so a breaking schema change is a new topic
     # rather than a poison pill on the existing one
@@ -31,7 +37,8 @@ class KafkaSettings(BaseSettings):
     topic_alerts: str = "mta.gtfs.alerts.v1"
 
     # acks=all plus the idempotent producer is what makes the Kafka leg
-    # exactly-once per produce attempt see docs/exactly_once.md
+    # exactly once per produce attempt
+    # streaming/dedup.py has the rest of the delivery argument
     acks: str = "all"
     enable_idempotence: bool = True
     compression_type: str = "lz4"
@@ -40,8 +47,17 @@ class KafkaSettings(BaseSettings):
     queue_buffering_max_messages: int = 1_000_000
     message_timeout_ms: int = 120_000
 
+    @property
+    def uses_msk_iam(self) -> bool:
+        """true when the broker expects msk sasl iam"""
+        return (self.sasl_mechanism or "").upper() == "AWS_MSK_IAM"
+
     def librdkafka_config(self) -> dict[str, object]:
-        """a dict confluent_kafka.Producer takes as is"""
+        """a dict confluent_kafka.Producer takes as is
+
+        msk iam needs an oauth_cb on top of this which is not serialisable so
+        producer/msk_iam.py adds it see with_oauth_callback
+        """
         cfg: dict[str, object] = {
             "bootstrap.servers": self.bootstrap_servers,
             "security.protocol": self.security_protocol,
@@ -53,8 +69,15 @@ class KafkaSettings(BaseSettings):
             "queue.buffering.max.messages": self.queue_buffering_max_messages,
             "message.timeout.ms": self.message_timeout_ms,
         }
-        # librdkafka rejects an empty sasl.mechanism so only set it when present
-        if self.sasl_mechanism:
+        if self.uses_msk_iam:
+            # librdkafka has no AWS_MSK_IAM mechanism it does the same thing
+            # under OAUTHBEARER with a callback that mints the token
+            cfg["sasl.mechanism"] = "OAUTHBEARER"
+            # msk only listens for iam on tls so a PLAINTEXT default here is
+            # always a misconfiguration and fails at connect with no useful error
+            cfg["security.protocol"] = "SASL_SSL"
+        elif self.sasl_mechanism:
+            # librdkafka rejects an empty sasl.mechanism so only set it when present
             cfg["sasl.mechanism"] = self.sasl_mechanism
         return cfg
 

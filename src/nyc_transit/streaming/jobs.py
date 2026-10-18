@@ -147,6 +147,26 @@ def kafka_source_options(
         # completes 200k records is about a 100s backlog at 2k events/sec
         "maxOffsetsPerTrigger": "200000",
         "kafka.group.id": f"nyc-transit-{job.name}",
+        **msk_iam_options(settings),
+    }
+
+
+def msk_iam_options(settings: Settings) -> dict[str, str]:
+    """the three options the java kafka client needs for msk sasl iam
+
+    empty for PLAINTEXT so the local path is unchanged
+    the jar holding these classes is added by session.iceberg_packages
+    the java client calls the mechanism AWS_MSK_IAM where librdkafka calls the
+    same exchange OAUTHBEARER
+    """
+    if not settings.kafka.uses_msk_iam:
+        return {}
+    return {
+        "kafka.sasl.mechanism": "AWS_MSK_IAM",
+        "kafka.sasl.jaas.config": ("software.amazon.msk.auth.iam.IAMLoginModule required;"),
+        "kafka.sasl.client.callback.handler.class": (
+            "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+        ),
     }
 
 
@@ -236,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         settings.lakehouse,
         app_name="nyc-transit-streaming",
         with_kafka=True,
+        with_msk_iam=settings.kafka.uses_msk_iam,
         local_threads=args.local_threads,
     )
 

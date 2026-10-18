@@ -31,8 +31,27 @@ class TestKafkaSettings:
         assert "sasl.mechanism" not in KafkaSettings().librdkafka_config()
 
     def test_sasl_mechanism_is_included_when_set(self):
+        config = KafkaSettings(sasl_mechanism="SCRAM-SHA-512").librdkafka_config()
+        assert config["sasl.mechanism"] == "SCRAM-SHA-512"
+
+    def test_msk_iam_is_translated_to_oauthbearer(self):
+        """librdkafka has no AWS_MSK_IAM mechanism
+
+        the java client names it that and does the exchange over OAUTHBEARER
+        passing AWS_MSK_IAM straight through makes librdkafka reject the config
+        """
         config = KafkaSettings(sasl_mechanism="AWS_MSK_IAM").librdkafka_config()
-        assert config["sasl.mechanism"] == "AWS_MSK_IAM"
+        assert config["sasl.mechanism"] == "OAUTHBEARER"
+
+    def test_msk_iam_forces_tls(self):
+        """msk only listens for iam on tls so PLAINTEXT here is always wrong"""
+        config = KafkaSettings(sasl_mechanism="AWS_MSK_IAM").librdkafka_config()
+        assert config["security.protocol"] == "SASL_SSL"
+
+    def test_uses_msk_iam_is_case_insensitive(self):
+        assert KafkaSettings(sasl_mechanism="aws_msk_iam").uses_msk_iam
+        assert not KafkaSettings().uses_msk_iam
+        assert not KafkaSettings(sasl_mechanism="PLAIN").uses_msk_iam
 
     def test_topics_are_versioned(self):
         """A breaking schema change becomes a new topic not a poison pill"""

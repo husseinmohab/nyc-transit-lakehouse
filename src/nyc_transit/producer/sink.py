@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 from nyc_transit.config import KafkaSettings, ProducerSettings
 from nyc_transit.gtfs.normalize import partition_key
+from nyc_transit.producer.msk_iam import with_oauth_callback
 from nyc_transit.schemas import serialize, serialize_json
 
 
@@ -167,7 +168,7 @@ class KafkaSink:
             from confluent_kafka import Producer
 
             producer_factory = Producer
-        self._producer = producer_factory(kafka.librdkafka_config())
+        self._producer = producer_factory(with_oauth_callback(kafka.librdkafka_config(), kafka))
         self._since_flush = 0
 
     def _on_delivery(self, err: Any, _msg: Any) -> None:

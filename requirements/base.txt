@@ -2,6 +2,9 @@
 gtfs-realtime-bindings>=1.0.0,<2
 protobuf>=4.25,<7
 confluent-kafka>=2.4,<3
+# Mints the presigned token MSK SASL/IAM uses. Only imported when
+# KAFKA_SASL_MECHANISM=AWS_MSK_IAM, so the local PLAINTEXT path never needs it.
+aws-msk-iam-sasl-signer-python>=1.0,<2
 fastavro>=1.9,<2
 httpx>=0.27,<1
 pydantic>=2.7,<3
