@@ -96,9 +96,13 @@ variable "allowed_client_cidrs" {
 # MSK sizing
 # ---------------------------------------------------------------------------
 variable "msk_kafka_version" {
-  description = "Kafka version for the MSK cluster."
+  description = <<-EOT
+    MSK no longer accepts Kafka versions below 3.8 for new clusters on standard
+    brokers; CreateCluster rejects 3.6.0 outright. `aws kafka
+    list-kafka-versions` is the live list for an account.
+  EOT
   type        = string
-  default     = "3.6.0"
+  default     = "3.9.x"
 }
 
 variable "msk_broker_count" {

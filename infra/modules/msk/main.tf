@@ -15,6 +15,15 @@ locals {
   brokers_per_az      = max(1, floor(var.broker_count / local.az_count))
   effective_brokers   = local.brokers_per_az * local.az_count
   broker_subnet_slice = slice(var.subnet_ids, 0, local.az_count)
+
+  # The broker defaults have to be coherent with how many brokers there are. A
+  # default.replication.factor above the broker count is rejected, and a
+  # min.insync.replicas of 2 on a single broker makes every acks=all produce
+  # hang. Three brokers gives the production pair (3 and 2), which is the
+  # broker-side half of the durability argument: a write is acknowledged only
+  # once two replicas hold it.
+  default_replication_factor = min(local.effective_brokers, 3)
+  min_insync_replicas        = local.default_replication_factor > 1 ? 2 : 1
 }
 
 resource "aws_security_group" "msk" {
@@ -103,11 +112,11 @@ resource "aws_msk_configuration" "this" {
  log.segment.bytes=1073741824
 
     # Durability. min.insync.replicas=2 with the producer's acks=all means a
-    # write is acknowledged only once two of three replicas hold it, so a
-    # single broker loss cannot lose an acknowledged record. This is the
-    # broker-side half of the exactly-once argument in docs/exactly_once.md.
- min.insync.replicas=2
- default.replication.factor=3
+    # write is acknowledged only once two replicas hold it, so a single broker
+    # loss cannot lose an acknowledged record. Both values follow the broker
+    # count; see the locals block for why they cannot be constants.
+ min.insync.replicas=${local.min_insync_replicas}
+ default.replication.factor=${local.default_replication_factor}
  unclean.leader.election.enable=false
 
     # The GTFS-RT payloads are small (~215 bytes/record) but the producer

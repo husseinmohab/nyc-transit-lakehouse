@@ -14,6 +14,12 @@
 # ---------------------------------------------------------------------------
 
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+data "aws_partition" "current" {}
+
+locals {
+  glue_arn_prefix = "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}"
+}
 
 resource "aws_glue_catalog_database" "layers" {
   for_each = toset(var.database_names)
@@ -59,6 +65,12 @@ data "aws_iam_policy_document" "catalog_read" {
       "glue:GetPartitions",
     ]
 
-    resources = ["*"]
+    # Glue validates these against arn:aws:glue:<region>:<account>:<thing>, so
+    # a bare "*" is rejected by PutResourcePolicy even though IAM accepts it.
+    resources = [
+      "${local.glue_arn_prefix}:catalog",
+      "${local.glue_arn_prefix}:database/*",
+      "${local.glue_arn_prefix}:table/*/*",
+    ]
   }
 }
