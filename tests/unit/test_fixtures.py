@@ -160,13 +160,22 @@ class TestCommittedSeeds:
 
 
 class TestStaticReference:
-    def test_every_route_has_at_least_one_stop(self):
+    def test_every_generated_route_has_stops(self):
         """The generator draws from routes_with_stops() so a route with none
         would make join-coverage tests vacuous for it
         """
+        from nyc_transit.gtfs.static_reference import routes_with_stops, stops_for_route
+
+        assert [r for r in routes_with_stops() if not stops_for_route(r)] == []
+
+    def test_only_the_express_variants_have_no_stops(self):
+        """6X 7X and FX run over another routes stations so the published
+        station list never names them anything else missing is a data problem
+        """
         from nyc_transit.gtfs.static_reference import ROUTES, stops_for_route
 
-        assert [r.route_id for r in ROUTES if not stops_for_route(r.route_id)] == []
+        missing = [r.route_id for r in ROUTES if not stops_for_route(r.route_id)]
+        assert sorted(missing) == ["6X", "7X", "FX"]
 
     def test_route_ids_are_unique(self):
         from nyc_transit.gtfs.static_reference import ROUTES

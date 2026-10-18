@@ -19,7 +19,7 @@ gtfs-loadgen = "nyc_transit.producer.loadgen:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-nyc_transit = ["schemas/avro/*.avsc"]
+nyc_transit = ["schemas/avro/*.avsc", "gtfs/data/*.csv"]
 
 [tool.black]
 line-length = 100
