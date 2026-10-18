@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Installs the published repo and writes the environment that points it at the
+# real MSK cluster, S3 bucket and Glue catalog. Output lands in
+# /var/log/cloud-init-output.log.
+#
+# The last line of a successful run writes BOOTSTRAP_DONE. Anything polling
+# this host should wait for that file rather than for the instance state,
+# because the instance is "running" long before pyspark finishes installing.
+set -euo pipefail
+
+INSTALL_DIR="${install_dir}"
+exec > >(tee -a /var/log/bootstrap.log) 2>&1
+
+echo "=== packages"
+dnf install -y --quiet \
+  git tar gzip gcc \
+  java-17-amazon-corretto-headless \
+  python3.11 python3.11-pip python3.11-devel
+
+echo "=== repo ${repo_ref}"
+rm -rf "$INSTALL_DIR"
+git clone --quiet "${repo_url}" "$INSTALL_DIR"
+git -C "$INSTALL_DIR" checkout --quiet "${repo_ref}"
+git -C "$INSTALL_DIR" --no-pager log -1 --oneline
+
+echo "=== venv"
+python3.11 -m venv "$INSTALL_DIR/.venv"
+"$INSTALL_DIR/.venv/bin/pip" install --quiet --upgrade pip wheel
+"$INSTALL_DIR/.venv/bin/pip" install --quiet \
+  -r "$INSTALL_DIR/requirements/base.txt" \
+  -r "$INSTALL_DIR/requirements/spark.txt"
+"$INSTALL_DIR/.venv/bin/pip" install --quiet -e "$INSTALL_DIR"
+
+echo "=== environment"
+# Namespaces carry the Glue database prefix. Iceberg's GlueCatalog maps a
+# namespace straight onto a Glue database name and has no prefix property, so
+# the namespace has to be the real database name that modules/glue_catalog
+# created, not the bare layer name the local hadoop catalog uses.
+cat > /etc/profile.d/nyc-transit.sh <<ENVFILE
+export AWS_REGION=${aws_region}
+export AWS_DEFAULT_REGION=${aws_region}
+
+export KAFKA_BOOTSTRAP_SERVERS='${bootstrap_brokers}'
+export KAFKA_SASL_MECHANISM=AWS_MSK_IAM
+export KAFKA_AWS_REGION=${aws_region}
+
+export LAKEHOUSE_CATALOG_TYPE=glue
+export LAKEHOUSE_WAREHOUSE=s3://${bucket_name}/warehouse
+export LAKEHOUSE_CHECKPOINT_ROOT=s3://${bucket_name}/checkpoints
+export LAKEHOUSE_BRONZE_NAMESPACE=${glue_db_prefix}_bronze
+export LAKEHOUSE_SILVER_NAMESPACE=${glue_db_prefix}_silver
+
+export GTFS_ENABLED_FEEDS=subway,alerts
+
+export PATH="$INSTALL_DIR/.venv/bin:\$PATH"
+ENVFILE
+chmod 0644 /etc/profile.d/nyc-transit.sh
+
+echo "=== sanity"
+# shellcheck disable=SC1091
+source /etc/profile.d/nyc-transit.sh
+"$INSTALL_DIR/.venv/bin/python" -c 'import confluent_kafka, pyspark, fastavro; print("imports ok")'
+"$INSTALL_DIR/.venv/bin/python" -c 'from aws_msk_iam_sasl_signer import MSKAuthTokenProvider as p; t, e = p.generate_auth_token("${aws_region}"); print("msk token ok", len(t))'
+java -version
+
+touch "$INSTALL_DIR/BOOTSTRAP_DONE"
+echo "=== done"

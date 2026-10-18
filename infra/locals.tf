@@ -1,6 +1,12 @@
 locals {
   name_prefix = "${var.project}-${var.environment}"
 
+  # One place decides where the network comes from, so no module below has to
+  # care whether it was created here or handed in.
+  vpc_id             = var.create_network ? module.vpc[0].vpc_id : var.vpc_id
+  private_subnet_ids = var.create_network ? module.vpc[0].private_subnet_ids : var.private_subnet_ids
+  public_subnet_ids  = var.create_network ? module.vpc[0].public_subnet_ids : []
+
   common_tags = merge(
     {
       Project     = var.project

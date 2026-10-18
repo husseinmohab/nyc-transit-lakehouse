@@ -52,3 +52,22 @@ output "env_file_preview" {
     LAKEHOUSE_CHECKPOINT_ROOT=${module.s3_lakehouse.checkpoint_uri}
   EOT
 }
+
+output "vpc_id" {
+  description = "Empty when an existing VPC was supplied rather than created."
+  value       = var.create_network ? module.vpc[0].vpc_id : var.vpc_id
+}
+
+output "test_host_instance_id" {
+  description = "Run commands on it with `aws ssm send-command`. No SSH key, no inbound rule."
+  value       = var.create_test_host ? module.test_host[0].instance_id : null
+}
+
+output "glue_database_prefix" {
+  description = <<-EOT
+    Iceberg maps a namespace onto a Glue database name with no prefix of its
+    own, so LAKEHOUSE_BRONZE_NAMESPACE has to be this prefix plus the layer
+    name, not the bare layer name the local hadoop catalog uses.
+  EOT
+  value       = replace(local.name_prefix, "-", "_")
+}

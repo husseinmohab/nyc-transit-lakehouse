@@ -26,19 +26,59 @@ variable "environment" {
   }
 }
 
+variable "create_network" {
+  description = <<-EOT
+    Create a VPC for this stack instead of being given one. The brokers have no
+    public endpoint under SASL/IAM, so something has to live in the same VPC;
+    set this when there is no existing VPC to put it in.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "vpc_id" {
-  description = "VPC the MSK cluster lives in. MSK has no public endpoint option worth using, so this is required."
+  description = "Existing VPC for the MSK brokers. Ignored when create_network is true."
   type        = string
+  default     = ""
 }
 
 variable "private_subnet_ids" {
-  description = "Private subnets for MSK brokers. Must be in at least two AZs; three is required for the 3-broker default."
+  description = "Private subnets for MSK brokers. Must be in at least two AZs; three is required for the 3-broker default. Ignored when create_network is true."
   type        = list(string)
+  default     = []
 
   validation {
-    condition     = length(var.private_subnet_ids) >= 2
+    condition     = length(var.private_subnet_ids) == 0 || length(var.private_subnet_ids) >= 2
     error_message = "MSK requires subnets in at least two availability zones."
   }
+}
+
+variable "vpc_cidr_block" {
+  description = "CIDR for the created VPC. Only read when create_network is true."
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "create_test_host" {
+  description = <<-EOT
+    Launch one in-VPC EC2 instance to exercise the stack against real AWS. A
+    test harness, not part of the production design: it holds the union of the
+    producer and streaming permissions because an instance profile can carry
+    only one role. Off by default.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "test_host_instance_type" {
+  type    = string
+  default = "t3.large"
+}
+
+variable "test_host_repo_ref" {
+  description = "Branch, tag or commit the test host checks out."
+  type        = string
+  default     = "main"
 }
 
 variable "allowed_client_cidrs" {
