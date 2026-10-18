@@ -17,19 +17,21 @@ models:
           - not_null
       - name: platform_stop_id
         description: >
-          Platform-level stop id exactly as published ("127N"). NULL for a
-          cancellation, which carries no stop_time_updates -- the normalizer
-          still emits one row so the cancellation stays visible downstream.
-        tests:
-          - not_null:
-              config:
-                where: "is_cancelled_trip = false"
+          Platform-level stop id exactly as published ("127N"). NULL when the
+          feed gave the trip no stop_time_updates, which happens for a
+          cancellation and also for a scheduled trip the MTA is not predicting
+          yet. The normalizer still emits one row so the trip stays visible.
+          There is no not_null test here because the only honest scope for one
+          would be "where it is not null"; assert_most_trip_rows_carry_a_stop
+          guards it in aggregate instead.
       - name: stop_id
-        description: Parent station id, suffix stripped. NULL for a cancellation.
+        description: >
+          Parent station id, suffix stripped. Derived from platform_stop_id so
+          it is NULL on exactly the same rows.
         tests:
           - not_null:
               config:
-                where: "is_cancelled_trip = false"
+                where: "platform_stop_id is not null"
           - relationships:
               arguments:
                 to: ref('stg_gtfs_stops')
@@ -79,11 +81,11 @@ models:
           config:
             # The declared grain of the whole pipeline. If this fails,
             # make_event_id and the MERGE key disagree with reality.
-            # Scoped to scheduled trips: a cancellation has a NULL
-            # platform_stop_id, and two cancellations in one publication are
-            # distinct rows that this test cannot tell apart.
+            # Scoped to rows that carry a stop. A trip with no
+            # stop_time_updates has a NULL platform_stop_id and this test
+            # cannot tell two of those apart inside one publication.
             severity: error
-            where: "is_cancelled_trip = false"
+            where: "platform_stop_id is not null"
           arguments:
             combination_of_columns:
               - service_date
@@ -217,7 +219,7 @@ models:
           - not_null
 
   - name: stg_gtfs_stops
-    description: Static station reference data (curated subset -- see docs/limitations.md).
+    description: Static station reference data, every parent station in stops.txt.
     columns:
       - name: stop_id
         tests:
@@ -247,7 +249,7 @@ models:
         tests:
           - accepted_values:
               config:
-                # Every curated stop must be inside the NYC bounding box. A
+                # Every stop must be inside the NYC bounding box. A
                 # failure means the reference data is wrong, not the feed.
                 severity: error
               arguments:

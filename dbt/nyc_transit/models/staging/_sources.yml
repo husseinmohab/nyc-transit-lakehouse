@@ -8,7 +8,7 @@ sources:
       real Iceberg tables; against the `duckdb` target the identifiers resolve
       to the committed seeds, which are generated from the same canonical
       records by scripts/generate_dbt_seeds.py. The models are identical
-      either way -- that is the point of the two targets.
+      either way, which is the point of the two targets.
     schema: "{{ var('silver_schema', target.schema) }}"
     tables:
       - name: silver_trip_stop_predictions
@@ -63,11 +63,11 @@ sources:
 
   - name: gtfs_static
     description: >
-      Static GTFS reference data. Locally this is the curated subset committed
-      as seeds (26 routes, 60 stations); in production the dbt `spark` target
-      points at the full stops.txt/routes.txt loaded from S3. See
-      docs/limitations.md -- the join-coverage tests assert a threshold rather
-      than 100%, because the local subset is a subset.
+      Static GTFS reference data. Locally this is the snapshot committed
+      as seeds (29 routes, 496 parent stations); the spark target points at
+      stops.txt and routes.txt loaded from S3. The join coverage test asserts a
+      threshold rather than 100% because the realtime feeds sometimes name a
+      stop the static file has not caught up with.
     schema: "{{ var('static_schema', target.schema) }}"
     tables:
       - name: gtfs_routes

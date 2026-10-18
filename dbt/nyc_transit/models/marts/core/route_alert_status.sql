@@ -71,14 +71,28 @@ select
     c.active_period_end,
     coalesce(a.open_alert_count, 0)      as open_alert_count,
 
-    -- The attribute the snapshot keys its change detection on derived from the
-    -- GTFS effect enum rather than from free text the header is edited
-    -- constantly for wording and snapshotting on it would create a new version
-    -- every time someone fixed a typo
+    -- The attribute the snapshot keys its change detection on
+    -- the effect enum is the signal when the feed sets it but the live subway
+    -- alerts feed leaves effect and cause unset on every alert and puts the
+    -- category in the header instead so the text is the fallback
+    -- keying the snapshot on the header itself would version it every time
+    -- someone fixed a typo which is why this collapses to four coarse values
+    -- the phrases come from the wording the mta actually publishes
+    -- 151 distinct live headers sorted 31 disrupted 84 degraded 36 notice
+    -- where notice is almost all boarding and entrance information
     case
-        when c.alert_effect is null then 'normal'
+        when c.alert_entity_id is null then 'normal'
         when c.alert_effect in ('NO_SERVICE', 'REDUCED_SERVICE') then 'disrupted'
         when c.alert_effect in ('SIGNIFICANT_DELAYS', 'DETOUR', 'MODIFIED_SERVICE') then 'degraded'
+        when c.alert_effect is not null then 'notice'
+        when {{ header_matches('c.header_text',
+                   phrases=[', no ', 'no service', 'suspend', 'bus replace',
+                            'shuttle bus'],
+                   prefixes=['no ']) }} then 'disrupted'
+        when {{ header_matches('c.header_text', phrases=[
+                   'skip', 'runs local', 'run local', 'runs express', 'reroute',
+                   'runs via', 'delay', 'runs every', 'minutes between',
+                   'may slow', 'replaces']) }} then 'degraded'
         else 'notice'
     end                                  as service_status
 

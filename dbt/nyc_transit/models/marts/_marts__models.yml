@@ -81,7 +81,9 @@ models:
     description: >
       SCD Type 2 dimension of vehicle-to-trip assignment. Grain: one row per
       (vehicle_id, continuous run of identical tracked attributes).
-      Interval convention [valid_from, valid_to).
+      Interval convention [valid_from, valid_to). Rebuilt whole rather than
+      partition scoped, because a run boundary depends on the observations on
+      either side of it, so one service date cannot be rebuilt in isolation.
     columns:
       - name: vehicle_assignment_sk
         description: md5(vehicle_id | version_group | valid_from).
@@ -190,12 +192,13 @@ models:
                 field: route_id
       - name: stop_id
         description: >
-          Parent station. NULL for a cancellation row, which the fact keeps on
-          purpose so cancellations stay countable.
+          Parent station. NULL on a row the feed gave no stop_time_updates for,
+          which the fact keeps on purpose so cancellations and trips with no
+          predictions stay countable.
         tests:
           - not_null:
               config:
-                where: "is_cancelled_trip = false"
+                where: "platform_stop_id is not null"
           - relationships:
               arguments:
                 to: ref('dim_stop')
@@ -350,7 +353,7 @@ models:
   - name: dq_prediction_quality_daily
     description: >
       Per-route, per-day prediction stability and coverage. Stability, never
-      accuracy -- this pipeline has no ground-truth arrival times.
+      accuracy, since this pipeline has no ground-truth arrival times.
     columns:
       - name: service_date
         tests:
