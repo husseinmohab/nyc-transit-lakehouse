@@ -24,6 +24,52 @@ locals {
   # once two replicas hold it.
   default_replication_factor = min(local.effective_brokers, 3)
   min_insync_replicas        = local.default_replication_factor > 1 ? 2 : 1
+
+  server_properties = <<-PROPERTIES
+    # Topics are declared in Terraform (see the kafka_topics variable). Letting
+    # a client auto-create one produces a topic with default partitions and
+    # retention that nobody chose, and which no code review ever saw.
+ auto.create.topics.enable=false
+
+    # Deleting a topic must be a deliberate admin action, not something a
+    # client library can do.
+ delete.topic.enable=true
+
+    # Match the producer's compression.type=lz4 so brokers store the batches as
+    # received instead of recompressing them.
+ compression.type=lz4
+
+    # Default retention; per-topic values in kafka_topics override this.
+ log.retention.hours=168
+
+    # 1 GB segments: fewer, larger segments reduce open file handles, and
+    # retention is enforced per segment so this bounds how much past retention
+    # the broker keeps.
+ log.segment.bytes=1073741824
+
+    # Durability. min.insync.replicas=2 with the producer's acks=all means a
+    # write is acknowledged only once two replicas hold it, so a single broker
+    # loss cannot lose an acknowledged record. Both values follow the broker
+    # count; see the locals block for why they cannot be constants.
+ min.insync.replicas=${local.min_insync_replicas}
+ default.replication.factor=${local.default_replication_factor}
+ unclean.leader.election.enable=false
+
+    # The GTFS-RT payloads are small (~215 bytes/record) but the producer
+    # batches up to 10k messages; 2 MB leaves ample headroom.
+ message.max.bytes=2097152
+
+    # Consumer group stability: Spark micro-batches commit every 30s, so a
+    # 45s session timeout tolerates one slow batch without a rebalance storm.
+ group.max.session.timeout.ms=120000
+  PROPERTIES
+
+  # An MSK configuration name is unique per account and a configuration cannot
+  # be updated in place, so create_before_destroy with a fixed name asks MSK to
+  # create a second configuration under a name that already exists and gets a
+  # 409. Hashing the content into the name means a new one appears exactly when
+  # the content changes, and the old one is dropped afterwards.
+  config_name = "${var.name_prefix}-config-${substr(sha256("${var.kafka_version}\n${local.server_properties}"), 0, 10)}"
 }
 
 resource "aws_security_group" "msk" {
@@ -85,48 +131,11 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # Cluster configuration
 # ---------------------------------------------------------------------------
 resource "aws_msk_configuration" "this" {
-  name           = "${var.name_prefix}-config"
+  name           = local.config_name
   kafka_versions = [var.kafka_version]
   description    = "GTFS-RT ingestion: no auto-create, explicit retention, LZ4."
 
-  server_properties = <<-PROPERTIES
-    # Topics are declared in Terraform (see the kafka_topics variable). Letting
-    # a client auto-create one produces a topic with default partitions and
-    # retention that nobody chose, and which no code review ever saw.
- auto.create.topics.enable=false
-
-    # Deleting a topic must be a deliberate admin action, not something a
-    # client library can do.
- delete.topic.enable=true
-
-    # Match the producer's compression.type=lz4 so brokers store the batches as
-    # received instead of recompressing them.
- compression.type=lz4
-
-    # Default retention; per-topic values in kafka_topics override this.
- log.retention.hours=168
-
-    # 1 GB segments: fewer, larger segments reduce open file handles, and
-    # retention is enforced per segment so this bounds how much past retention
-    # the broker keeps.
- log.segment.bytes=1073741824
-
-    # Durability. min.insync.replicas=2 with the producer's acks=all means a
-    # write is acknowledged only once two replicas hold it, so a single broker
-    # loss cannot lose an acknowledged record. Both values follow the broker
-    # count; see the locals block for why they cannot be constants.
- min.insync.replicas=${local.min_insync_replicas}
- default.replication.factor=${local.default_replication_factor}
- unclean.leader.election.enable=false
-
-    # The GTFS-RT payloads are small (~215 bytes/record) but the producer
-    # batches up to 10k messages; 2 MB leaves ample headroom.
- message.max.bytes=2097152
-
-    # Consumer group stability: Spark micro-batches commit every 30s, so a
-    # 45s session timeout tolerates one slow batch without a rebalance storm.
- group.max.session.timeout.ms=120000
-  PROPERTIES
+  server_properties = local.server_properties
 
   lifecycle {
     # MSK configurations are immutable once referenced by a cluster; a new one
