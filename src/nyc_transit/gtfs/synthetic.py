@@ -32,6 +32,17 @@ from nyc_transit.gtfs.static_reference import (
     stops_for_route,
 )
 
+# Header wording paired with the effect it stands for the mta writes these by
+# hand so the text is what route_alert_status has to classify
+ALERT_KINDS: tuple[tuple[int, str], ...] = (
+    (gtfs_realtime_pb2.Alert.Effect.SIGNIFICANT_DELAYS, "trains are running with delays"),
+    (gtfs_realtime_pb2.Alert.Effect.NO_SERVICE, "no service between two stations"),
+    (gtfs_realtime_pb2.Alert.Effect.REDUCED_SERVICE, "service is suspended in one direction"),
+    (gtfs_realtime_pb2.Alert.Effect.DETOUR, "service is rerouted in both directions"),
+    (gtfs_realtime_pb2.Alert.Effect.MODIFIED_SERVICE, "runs local in both directions"),
+    (gtfs_realtime_pb2.Alert.Effect.OTHER_EFFECT, "trains board from the express track"),
+)
+
 
 @dataclass(slots=True)
 class SyntheticFeedConfig:
@@ -60,6 +71,8 @@ class SyntheticFeedConfig:
     alerts_per_message: int = 2
     duplicate_fraction: float = 0.05
     cancellation_fraction: float = 0.02
+    no_prediction_fraction: float = 0.03
+    stop_sequence_fraction: float = 0.06
     trips_per_route: int = 24
     fleet_size_per_route: int = 10
     reassignment_probability: float = 0.15
@@ -75,6 +88,10 @@ class SyntheticFeedConfig:
             raise ValueError("duplicate_fraction must be in [0, 1]")
         if not 0.0 <= self.cancellation_fraction <= 1.0:
             raise ValueError("cancellation_fraction must be in [0, 1]")
+        if not 0.0 <= self.no_prediction_fraction <= 1.0:
+            raise ValueError("no_prediction_fraction must be in [0, 1]")
+        if not 0.0 <= self.stop_sequence_fraction <= 1.0:
+            raise ValueError("stop_sequence_fraction must be in [0, 1]")
         if self.fleet_size_per_route < 1:
             raise ValueError("fleet_size_per_route must be at least 1")
         if self.trips_per_route < 1:
@@ -263,15 +280,28 @@ class SyntheticFeedGenerator:
         tu.trip.schedule_relationship = (
             gtfs_realtime_pb2.TripDescriptor.ScheduleRelationship.SCHEDULED
         )
+        if trip_rng.random() < self.config.no_prediction_fraction:
+            # Real feeds publish scheduled trips with no stop_time_updates at all
+            # the rockaway park shuttle does it constantly
+            # the normalizer still emits one row and stop_id stays null so anything
+            # asserting that only cancellations lack a stop is wrong about the feed
+            return
+
         lo, hi = self.config.stops_per_trip
         direction = "N" if tu.trip.direction_id == 0 else "S"
         path = self._trip_path(route, direction, trip_rng.randint(lo, hi), rng=trip_rng)
         eta = feed_timestamp_epoch + publication_rng.randint(30, 240)
 
+        # stop_sequence is optional in GTFS-RT and nyct leaves it unset on most
+        # stop_time_updates it publishes so most trips here leave it unset too
+        # anything that needs a stop has to key on stop_id
+        with_sequence = trip_rng.random() < self.config.stop_sequence_fraction
+
         for offset, platform_id in enumerate(path):
             stu = tu.stop_time_update.add()
             stu.stop_id = platform_id
-            stu.stop_sequence = offset + 1
+            if with_sequence:
+                stu.stop_sequence = offset + 1
             eta += publication_rng.randint(60, 180)
             stu.arrival.time = eta
             stu.arrival.uncertainty = publication_rng.choice([0, 30, 60])
@@ -354,18 +384,26 @@ class SyntheticFeedGenerator:
         entity = message.entity.add()
         entity.id = f"alert-{self._rng.randint(100000, 999999)}"
         alert = entity.alert
-        alert.cause = gtfs_realtime_pb2.Alert.Cause.MAINTENANCE
-        alert.effect = gtfs_realtime_pb2.Alert.Effect.MODIFIED_SERVICE
         period = alert.active_period.add()
         period.start = feed_timestamp_epoch
         period.end = feed_timestamp_epoch + 7200
+        route = self._rng.choice(self.config.routes)
+        effect, text = self._rng.choice(ALERT_KINDS)
+
+        # The live subway alerts feed never sets effect or cause it puts the
+        # category in the header and leaves the enums at their default
+        # most alerts here look like that so route_alert_status gets exercised
+        # on the path production actually takes
+        if self._rng.random() < 0.25:
+            alert.cause = gtfs_realtime_pb2.Alert.Cause.MAINTENANCE
+            alert.effect = effect
+
         header = alert.header_text.translation.add()
         header.language = "en"
-        route = self._rng.choice(self.config.routes)
-        header.text = f"[{route}] trains run with delays"
+        header.text = f"[{route}] {text}"
         body = alert.description_text.translation.add()
         body.language = "en"
-        body.text = f"Scheduled maintenance affects [{route}] service in both directions."
+        body.text = f"[{route}] service is affected in both directions."
         informed = alert.informed_entity.add()
         informed.agency_id = "MTA NYCT"
         informed.route_id = route

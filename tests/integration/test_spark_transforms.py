@@ -299,6 +299,61 @@ class TestSilverVehiclePositions:
         assert to_silver_vehicle_positions(vehicle_bronze).columns == expected
 
 
+def alert_bronze_schema():
+    """declared schema for the bronze alert columns this file feeds to spark
+
+    the live feed leaves alert_cause and alert_effect unset on every alert so
+    those columns are all null in the fixture and inference has nothing to go on
+    """
+    from pyspark.sql.types import (
+        ArrayType,
+        IntegerType,
+        LongType,
+        StringType,
+        StructField,
+        StructType,
+    )
+
+    return StructType(
+        [
+            StructField("event_id", StringType()),
+            StructField("service_date", StringType()),
+            StructField("feed_id", StringType()),
+            StructField("feed_timestamp_ms", LongType()),
+            StructField("entity_id", StringType()),
+            StructField("alert_cause", StringType()),
+            StructField("alert_effect", StringType()),
+            StructField("header_text", StringType()),
+            StructField(
+                "active_periods",
+                ArrayType(
+                    StructType(
+                        [
+                            StructField("start_epoch", LongType()),
+                            StructField("end_epoch", LongType()),
+                        ]
+                    )
+                ),
+            ),
+            StructField(
+                "informed_entities",
+                ArrayType(
+                    StructType(
+                        [
+                            StructField("agency_id", StringType()),
+                            StructField("route_id", StringType()),
+                            StructField("route_type", IntegerType()),
+                            StructField("direction_id", IntegerType()),
+                            StructField("trip_id", StringType()),
+                            StructField("stop_id", StringType()),
+                        ]
+                    )
+                ),
+            ),
+        ]
+    )
+
+
 class TestSilverAlerts:
     @pytest.fixture
     def alert_bronze(self, spark, fixture_records):
@@ -320,7 +375,7 @@ class TestSilverAlerts:
             for r in fixture_records
             if r["record_type"] == "alert"
         ]
-        return to_bronze(spark.createDataFrame(rows))
+        return to_bronze(spark.createDataFrame(rows, schema=alert_bronze_schema()))
 
     def test_explodes_to_one_row_per_informed_entity(self, alert_bronze, fixture_records):
         from nyc_transit.streaming.transforms import to_silver_alert_informed_entities
