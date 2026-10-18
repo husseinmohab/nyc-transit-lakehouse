@@ -7,6 +7,10 @@
 # Iceberg tables through a Spark Thrift Server backed by the Glue catalog.
 # Switching is `dbt build --target spark`; no model changes.
 #
+# `spark_session` is the same thing without the Thrift Server. dbt builds its
+# own in-process SparkSession, which is how a single host runs the models
+# against Glue and S3 with nothing else listening.
+#
 # A real deployment reads host/credentials from the environment (see
 # docker/.env.example and infra/modules/iam). No secrets live in this file.
 nyc_transit:
@@ -32,3 +36,21 @@ nyc_transit:
       connect_timeout: 30
       server_side_parameters:
         spark.sql.catalog.lakehouse: org.apache.iceberg.spark.SparkCatalog
+
+    # One node, no Thrift Server. The catalog is configured through
+    # server_side_parameters because dbt owns the session here, so there is no
+    # spark-submit to pass --conf to.
+    spark_session:
+      type: spark
+      method: session
+      host: NA
+      schema: "{{ env_var('DBT_SPARK_SCHEMA', 'marts') }}"
+      threads: 1
+      server_side_parameters:
+        spark.sql.catalog.lakehouse: org.apache.iceberg.spark.SparkCatalog
+        spark.sql.catalog.lakehouse.catalog-impl: org.apache.iceberg.aws.glue.GlueCatalog
+        spark.sql.catalog.lakehouse.io-impl: org.apache.iceberg.aws.s3.S3FileIO
+        spark.sql.catalog.lakehouse.warehouse: "{{ env_var('LAKEHOUSE_WAREHOUSE', 's3://change-me/warehouse') }}"
+        spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        spark.sql.defaultCatalog: lakehouse
+        spark.jars.packages: "{{ env_var('DBT_SPARK_PACKAGES', '') }}"

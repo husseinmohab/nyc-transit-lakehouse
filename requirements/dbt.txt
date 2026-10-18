@@ -3,3 +3,7 @@
 dbt-core>=1.10,<2
 dbt-duckdb>=1.9,<2
 duckdb>=1.0
+# The spark targets. The [session] extra is what the spark_session target uses
+# and it needs nothing running; the thrift target additionally needs
+# dbt-spark[PyHive] and a Spark Thrift Server to connect to.
+dbt-spark[session]>=1.9,<2
