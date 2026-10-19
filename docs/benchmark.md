@@ -6,13 +6,13 @@
 build FeedMessage -> protobuf serialize -> protobuf decode -> normalize -> avro encode -> sink
 ```
 
-the production path not a loop over prebuilt dicts
-the protobuf round trip is included because decoding is a real share of the cost
+the protobuf round trip is included because decoding is a real share of the
+cost
 
 `tests/unit/test_loadgen.py::TestBenchmark::test_exercises_the_full_production_path`
 asserts the avro encoder actually ran
 
-## three sinks
+## sinks
 
 | `--target` | isolates |
 |---|---|
@@ -20,8 +20,7 @@ asserts the avro encoder actually ran
 | `memory` | same but retains payloads, shows allocation cost |
 | `kafka` | end to end into a real broker |
 
-without separating them the benchmark cannot tell "transforms are slow" from
-"the broker is the bottleneck"
+separating them is what tells a slow transform apart from a slow broker
 
 ## commands
 
@@ -37,7 +36,7 @@ or directly
 python -m nyc_transit.producer.loadgen --target null --duration 30 --target-eps 2000
 ```
 
-exits non zero under 95% of target so `make bench` asserts rather than prints
+exits non zero under 95% of target so `make bench` asserts
 
 ## results
 

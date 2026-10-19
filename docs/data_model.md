@@ -243,14 +243,14 @@ duckdb takes either, spark rejects a bare varchar with DATATYPE_MISSING_SIZE
 the iceberg runtime is pinned at 1.10.2
 1.7.1 crashes the jvm on a vectorized parquet read, a SIGSEGV inside the jvm's
 own symbol tables that reproduces on corretto and temurin 17 alike, so it is
-the iceberg reader and not the jvm
+the iceberg reader at fault
 1.10.2 reads the same tables with vectorization left on
 
 spark local dirs default to `/tmp` which is a 3.9G tmpfs on amazon linux 2023
 that is RAM backed so a shuffle fills memory and the run dies
 point `SPARK_LOCAL_DIRS` at the EBS volume
 
-### the snapshot runs on athena and not on spark
+### the snapshot runs on athena
 
 `snap_route_alert_status` builds on duckdb and on athena
 it fails on a glue backed iceberg catalog through dbt-spark with

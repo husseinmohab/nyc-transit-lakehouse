@@ -1,4 +1,4 @@
-# Four targets, one model tree. No model changes between them.
+# One model tree, four targets. No model changes between them.
 #
 # `duckdb` is the default and the local and CI target. It reads the committed
 # seeds so `dbt build` runs on a laptop with no cluster, no Kafka and no AWS.

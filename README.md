@@ -5,8 +5,8 @@
 MTA GTFS-Realtime feeds to Kafka to Apache Iceberg on S3
 Spark Structured Streaming, dbt, Airflow, Great Expectations, Terraform
 
-Run against real AWS: live feeds through MSK over SASL/IAM into Iceberg on S3
-through the Glue catalog
+Runs on AWS, live feeds through MSK over SASL/IAM into Iceberg on S3 through
+the Glue catalog
 
 ## architecture
 
@@ -36,7 +36,6 @@ flowchart TB
     subgraph lake["Iceberg on S3 (Glue)"]
         B["bronze<br/>replay substrate"]
         SI["silver"]
-        L["_stream_commits<br/>commit ledger"]
     end
 
     subgraph dbt["dbt"]
@@ -60,7 +59,6 @@ flowchart TB
     K1 & K2 & K3 --> S
     S --> B
     S --> SI
-    S -.-> L
     B -->|backfill| SI
     SI --> ST --> DIM & FCT
     DIM --> FCT --> AGG
@@ -177,7 +175,7 @@ make help
 
 ## deploying to aws
 
-seven modules
+modules
 `s3_lakehouse` `msk` `glue_catalog` `iam` `vpc` `athena` `test_host`
 
 MSK is SASL/IAM only so there is no Kafka password anywhere and no public broker
@@ -220,8 +218,7 @@ the `spark_session` target is still there for a cluster that already exists
 the dbt snapshot does not run on it, see
 [docs/data_model.md](docs/data_model.md)
 
-gotchas, all found by running it, detail in
-[docs/data_model.md](docs/data_model.md)
+gotchas, detail in [docs/data_model.md](docs/data_model.md)
 - namespaces must be the real Glue database names
 - the driver needs more than its 1 GB default or the Kafka admin client OOMs
 - point `SPARK_LOCAL_DIRS` at the EBS volume, `/tmp` is a RAM backed tmpfs
@@ -231,7 +228,7 @@ gotchas, all found by running it, detail in
   athena path
 - teardown needs the buckets emptied first, `force_destroy` is unset on purpose
 
-verified on real AWS
+run on AWS
 9 live feeds through MSK into Iceberg on S3 through Glue, then 14 dbt models,
 the snapshot and 165 dbt tests on athena with 2 expected warnings
 
