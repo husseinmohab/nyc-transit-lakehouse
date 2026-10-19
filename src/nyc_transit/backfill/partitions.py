@@ -202,7 +202,13 @@ def plan_backfill(
     return plan
 
 
-def rebuild_partition_sql(*, catalog: str, table: str, partition_value: str) -> list[str]:
+def rebuild_partition_sql(
+    *,
+    catalog: str,
+    table: str,
+    partition_value: str,
+    namespaces: dict[str, str] | None = None,
+) -> list[str]:
     """the delete and insert that replace one partition of one table
 
     returned as strings instead of executed so the statements are printable and
@@ -215,8 +221,17 @@ def rebuild_partition_sql(*, catalog: str, table: str, partition_value: str) -> 
     """
     guard_target_table(table)
     source = REBUILDABLE_TABLES[table]
-    target_fqn = f"{catalog}.{table}"
-    source_fqn = f"{catalog}.{source}"
+
+    # REBUILDABLE_TABLES names the layer (silver.x). Against a glue catalog the
+    # namespace is the glue database, which is prefixed, so the layer name is
+    # not the namespace. Pass LakehouseSettings.namespaces() or the DELETE here
+    # targets a table that does not exist.
+    def _ns(fqn: str) -> str:
+        layer, _, name = fqn.partition(".")
+        return f"{catalog}.{(namespaces or {}).get(layer, layer)}.{name}"
+
+    target_fqn = _ns(table)
+    source_fqn = _ns(source)
 
     delete = partition_delete_sql(
         target_table=target_fqn,

@@ -82,13 +82,13 @@ def create_namespace_sql(catalog: str, namespace: str) -> str:
     return f"CREATE NAMESPACE IF NOT EXISTS {catalog}.{namespace}"
 
 
-def create_table_sql(catalog: str, spec: TableSpec) -> str:
+def create_table_sql(catalog: str, spec: TableSpec, namespace: str | None = None) -> str:
     """render CREATE TABLE IF NOT EXISTS for one spec"""
     cols = ",\n".join(
         f"  {name} {dtype} COMMENT '{_escape(comment)}'" for name, dtype, comment in spec.columns
     )
     parts = [
-        f"CREATE TABLE IF NOT EXISTS {catalog}.{spec.namespace}.{spec.name} (",
+        f"CREATE TABLE IF NOT EXISTS {catalog}.{namespace or spec.namespace}.{spec.name} (",
         cols,
         ")",
         "USING iceberg",
@@ -101,7 +101,7 @@ def create_table_sql(catalog: str, spec: TableSpec) -> str:
     return "\n".join(parts)
 
 
-def write_order_sql(catalog: str, spec: TableSpec) -> str | None:
+def write_order_sql(catalog: str, spec: TableSpec, namespace: str | None = None) -> str | None:
     """ALTER TABLE WRITE ORDERED BY for the tables sort order
 
     a separate statement because iceberg hangs the sort order off table metadata and
@@ -112,7 +112,7 @@ def write_order_sql(catalog: str, spec: TableSpec) -> str | None:
     if not spec.sort_order:
         return None
     return (
-        f"ALTER TABLE {catalog}.{spec.namespace}.{spec.name} "
+        f"ALTER TABLE {catalog}.{namespace or spec.namespace}.{spec.name} "
         f"WRITE ORDERED BY {', '.join(spec.sort_order)}"
     )
 
@@ -283,6 +283,11 @@ SILVER_VEHICLE_POSITIONS = TableSpec(
         ("vehicle_id", "string", "GTFS vehicle id"),
         ("trip_id", "string", "trip the vehicle is running, nullable when unassigned"),
         ("route_id", "string", "GTFS route id"),
+        (
+            "nyct_train_id",
+            "string",
+            "nyct physical train id, the only unit identity the subway feed gives",
+        ),
         ("direction_id", "int", "0/1"),
         ("reported_at", "timestamp", "vehicle's own timestamp, falling back to the feed's"),
         ("reported_at_ms", "bigint", "same instant in epoch ms; the version column"),
@@ -366,14 +371,26 @@ ALL_SPECS: tuple[TableSpec, ...] = (
 SPECS_BY_FQN: dict[str, TableSpec] = {f"{s.namespace}.{s.name}": s for s in ALL_SPECS}
 
 
-def all_ddl(catalog: str, specs: tuple[TableSpec, ...] = ALL_SPECS) -> list[str]:
-    """every statement needed to stand the lakehouse up in dependency order"""
+def all_ddl(
+    catalog: str,
+    specs: tuple[TableSpec, ...] = ALL_SPECS,
+    namespaces: dict[str, str] | None = None,
+) -> list[str]:
+    """every statement needed to stand the lakehouse up in dependency order
+
+    namespaces maps a spec's layer to the namespace it really lives in
+    pass LakehouseSettings.namespaces() against a glue catalog where the
+    database carries a prefix leaving it out keeps the layer name which is what
+    the local hadoop catalog uses
+    """
+    resolved = {s.namespace: (namespaces or {}).get(s.namespace, s.namespace) for s in specs}
     statements: list[str] = []
-    for namespace in dict.fromkeys(s.namespace for s in specs):
+    for namespace in dict.fromkeys(resolved[s.namespace] for s in specs):
         statements.append(create_namespace_sql(catalog, namespace))
     for spec in specs:
-        statements.append(create_table_sql(catalog, spec))
-        order = write_order_sql(catalog, spec)
+        ns = resolved[spec.namespace]
+        statements.append(create_table_sql(catalog, spec, namespace=ns))
+        order = write_order_sql(catalog, spec, namespace=ns)
         if order:
             statements.append(order)
     return statements

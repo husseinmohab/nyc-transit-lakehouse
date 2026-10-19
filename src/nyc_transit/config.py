@@ -132,6 +132,9 @@ class LakehouseSettings(BaseSettings):
 
     bronze_namespace: str = "bronze"
     silver_namespace: str = "silver"
+    # where the static gtfs reference tables are written see
+    # streaming/static_tables.py dbt reads them through the gtfs_static source
+    static_namespace: str = "staging"
 
     # Set for MinIO in docker-compose unset on AWS so the default S3 endpoint wins
     s3_endpoint: str | None = None
@@ -139,7 +142,11 @@ class LakehouseSettings(BaseSettings):
     s3_secret_key: str | None = None
     s3_path_style_access: bool = True
 
-    iceberg_version: str = "1.7.1"
+    # 1.7.1 crashes the jvm on a vectorized parquet read, a SIGSEGV inside
+    # the jvm's own symbol tables that reproduces on both corretto and temurin
+    # 17, so it is the iceberg reader and not the jvm
+    # 1.10.2 reads the same tables with vectorization left on
+    iceberg_version: str = "1.10.2"
     spark_major_minor: str = "3.5"
     scala_version: str = "2.12"
 
@@ -158,6 +165,22 @@ class LakehouseSettings(BaseSettings):
 
     def silver(self, name: str) -> str:
         return self.table(self.silver_namespace, name)
+
+    def namespaces(self) -> dict[str, str]:
+        """layer name to the namespace it actually lives in
+
+        the specs in streaming/ddl.py and the rebuildable tables in
+        backfill/partitions.py name their layer bronze or silver
+        against a glue catalog the namespace is the glue database which carries
+        a prefix so the two are not the same string and anything building a
+        table name needs this mapping or the ddl and the writers disagree
+        """
+        return {"bronze": self.bronze_namespace, "silver": self.silver_namespace}
+
+    def qualify(self, layer_qualified: str) -> str:
+        """bronze.trip_updates to the full catalog namespace name"""
+        layer, _, name = layer_qualified.partition(".")
+        return self.table(self.namespaces().get(layer, layer), name)
 
     def checkpoint_for(self, job_name: str) -> str:
         """checkpoint dir for a named streaming query

@@ -162,6 +162,12 @@ def msk_iam_options(settings: Settings) -> dict[str, str]:
     if not settings.kafka.uses_msk_iam:
         return {}
     return {
+        # msk only listens for iam on tls and the default is PLAINTEXT so
+        # without this the client speaks plaintext at port 9098 and the only
+        # symptom is describeTopics timing out on a node assignment which
+        # looks like a network or security group problem
+        # librdkafka_config forces the same thing for the producer
+        "kafka.security.protocol": "SASL_SSL",
         "kafka.sasl.mechanism": "AWS_MSK_IAM",
         "kafka.sasl.jaas.config": ("software.amazon.msk.auth.iam.IAMLoginModule required;"),
         "kafka.sasl.client.callback.handler.class": (
@@ -222,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="repeatable; defaults to all jobs.",
     )
     parser.add_argument("--create-tables", action="store_true", help="apply the Iceberg DDL first.")
+    parser.add_argument(
+        "--load-static",
+        action="store_true",
+        help="write the static GTFS reference tables and exit (dbt seeds cannot "
+        "load them on spark; see streaming/static_tables.py).",
+    )
     parser.add_argument("--show-ddl", action="store_true", help="print the DDL and exit.")
     parser.add_argument("--starting-offsets", default="latest", choices=["latest", "earliest"])
     parser.add_argument("--trigger-seconds", type=int, default=30)
@@ -247,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     catalog = settings.lakehouse.catalog_name
 
     if args.show_ddl:
-        for statement in ddl.all_ddl(catalog):
+        for statement in ddl.all_ddl(catalog, namespaces=settings.lakehouse.namespaces()):
             print(statement + ";\n")
         return 0
 
@@ -261,7 +273,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.create_tables:
-        apply_ddl(spark, ddl.all_ddl(catalog))
+        apply_ddl(spark, ddl.all_ddl(catalog, namespaces=settings.lakehouse.namespaces()))
+
+    if args.load_static:
+        from nyc_transit.streaming.static_tables import load_static_reference
+
+        for table, rows in load_static_reference(spark, settings.lakehouse).items():
+            log.info("static reference: %s <- %d rows", table, rows)
+        return 0
 
     queries = [
         start_query(
