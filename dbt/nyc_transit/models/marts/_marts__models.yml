@@ -80,17 +80,21 @@ models:
   - name: dim_vehicle_assignment
     description: >
       SCD Type 2 dimension of vehicle-to-trip assignment. Grain: one row per
-      (vehicle_id, continuous run of identical tracked attributes).
+      (vehicle_key, continuous run of identical tracked attributes).
       Interval convention [valid_from, valid_to). Rebuilt whole rather than
       partition scoped, because a run boundary depends on the observations on
       either side of it, so one service date cannot be rebuilt in isolation.
     columns:
       - name: vehicle_assignment_sk
-        description: md5(vehicle_id | version_group | valid_from).
+        description: md5(vehicle_key | version_group | valid_from).
         tests:
           - not_null
           - unique
-      - name: vehicle_id
+      - name: vehicle_key
+        description: >
+          coalesce(vehicle_id, nyct_train_id) from staging, the identity of the
+          physical unit. The NYCT subway feed sends no vehicle descriptor, so
+          this is the NYCT train id there.
         tests:
           - not_null
       - name: service_date
@@ -137,7 +141,7 @@ models:
             severity: error
           arguments:
             combination_of_columns:
-              - vehicle_id
+              - vehicle_key
               - valid_from
       - dbt_utils.expression_is_true:
           config:
@@ -200,6 +204,13 @@ models:
               config:
                 where: "platform_stop_id is not null"
           - relationships:
+              config:
+                severity: warn
+          # warn and not error. The realtime feeds name stop ids the static
+          # stops.txt has no station for at all (R60, F17, R65, G25, H19, M07
+          # were all live and all absent), so strict referential integrity is
+          # not achievable against the real feed. Measured coverage is 99.07%.
+          # assert_stop_join_coverage_above_threshold is the hard gate at 98%.
               arguments:
                 to: ref('dim_stop')
                 field: stop_id

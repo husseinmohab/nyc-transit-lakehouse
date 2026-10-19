@@ -11,11 +11,11 @@
 with ordered as (
 
     select
-        vehicle_id,
+        vehicle_key,
         vehicle_assignment_sk,
         valid_from,
         valid_to,
-        lead(valid_from) over (partition by vehicle_id order by valid_from) as next_valid_from
+        lead(valid_from) over (partition by vehicle_key order by valid_from) as next_valid_from
     from {{ ref('dim_vehicle_assignment') }}
 
 )

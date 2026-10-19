@@ -81,6 +81,7 @@ def vehicle_position_row(record: dict[str, Any]) -> dict[str, Any]:
         "service_date": record["service_date"],
         "feed_id": record["feed_id"],
         "vehicle_id": record.get("vehicle_id"),
+        "nyct_train_id": record.get("nyct_train_id"),
         "trip_id": record.get("trip_id"),
         "route_id": record.get("route_id"),
         "direction_id": record.get("direction_id"),

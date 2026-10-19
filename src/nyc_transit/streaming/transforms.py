@@ -119,6 +119,7 @@ def to_silver_vehicle_positions(bronze_df: DataFrame) -> DataFrame:
         F.col("vehicle_id"),
         F.col("trip_id"),
         F.col("route_id"),
+        F.col("nyct_train_id"),
         F.col("direction_id"),
         F.timestamp_seconds(reported_ms / F.lit(1000)).alias("reported_at"),
         reported_ms.cast("bigint").alias("reported_at_ms"),

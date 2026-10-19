@@ -151,6 +151,7 @@ VEHICLE_COLUMNS = [
     "vehicle_id",
     "trip_id",
     "route_id",
+    "nyct_train_id",
     "direction_id",
     "reported_at",
     "reported_at_ms",

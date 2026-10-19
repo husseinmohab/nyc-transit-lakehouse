@@ -7,7 +7,7 @@
 */
 
 select
-    a.vehicle_id,
+    a.vehicle_key,
     a.vehicle_assignment_sk as sk_a,
     b.vehicle_assignment_sk as sk_b,
     a.valid_from            as valid_from_a,
@@ -17,7 +17,7 @@ select
 
 from {{ ref('dim_vehicle_assignment') }} a
 inner join {{ ref('dim_vehicle_assignment') }} b
-    on a.vehicle_id = b.vehicle_id
+    on a.vehicle_key = b.vehicle_key
     and a.vehicle_assignment_sk <> b.vehicle_assignment_sk
     -- Half-open [from, to) overlap a starts before b ends and b starts before
     -- a ends Equality is not an overlap because a's valid_to equals its

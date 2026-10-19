@@ -169,8 +169,8 @@ class TestScd2Behaviour:
         bad = q(
             warehouse,
             """
-            SELECT vehicle_id, count(*) FROM main_marts.dim_vehicle_assignment
-            WHERE is_current GROUP BY vehicle_id HAVING count(*) <> 1
+            SELECT vehicle_key, count(*) FROM main_marts.dim_vehicle_assignment
+            WHERE is_current GROUP BY vehicle_key HAVING count(*) <> 1
             """,
         )
         assert bad == []
@@ -179,10 +179,10 @@ class TestScd2Behaviour:
         bad = q(
             warehouse,
             """
-            SELECT a.vehicle_id
+            SELECT a.vehicle_key
             FROM main_marts.dim_vehicle_assignment a
             JOIN main_marts.dim_vehicle_assignment b
-              ON a.vehicle_id = b.vehicle_id
+              ON a.vehicle_key = b.vehicle_key
              AND a.vehicle_assignment_sk <> b.vehicle_assignment_sk
              AND a.valid_from < b.valid_to
              AND b.valid_from < a.valid_to
@@ -195,8 +195,8 @@ class TestScd2Behaviour:
             warehouse,
             """
             WITH ordered AS (
-              SELECT vehicle_id, valid_to,
-                     lead(valid_from) OVER (PARTITION BY vehicle_id ORDER BY valid_from) AS nxt
+              SELECT vehicle_key, valid_to,
+                     lead(valid_from) OVER (PARTITION BY vehicle_key ORDER BY valid_from) AS nxt
               FROM main_marts.dim_vehicle_assignment
             )
             SELECT * FROM ordered WHERE nxt IS NOT NULL AND valid_to <> nxt
@@ -210,8 +210,8 @@ class TestScd2Behaviour:
             warehouse,
             """
             WITH ordered AS (
-              SELECT vehicle_id, is_assigned,
-                     lag(is_assigned) OVER (PARTITION BY vehicle_id ORDER BY valid_from) AS prev
+              SELECT vehicle_key, is_assigned,
+                     lag(is_assigned) OVER (PARTITION BY vehicle_key ORDER BY valid_from) AS prev
               FROM main_marts.dim_vehicle_assignment
             )
             SELECT count(*) FROM ordered WHERE prev IS NOT NULL AND prev <> is_assigned

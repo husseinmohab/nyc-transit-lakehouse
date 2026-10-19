@@ -1,4 +1,4 @@
-{{ config(materialized = 'view', tags = ['staging', 'vehicle_positions']) }}
+{{ config(materialized = 'table' if target.type == 'spark' else 'view', tags = ['staging', 'vehicle_positions']) }}
 
 with source as (
     select * from {{ source('lakehouse', 'silver_vehicle_positions') }}
@@ -9,6 +9,16 @@ select
     cast(service_date as date) as service_date,
     feed_id,
     vehicle_id,
+    nyct_train_id,
+
+    -- the identity of the physical unit
+    -- gtfs vehicle_id when the feed sends a vehicle descriptor and the nyct
+    -- train id when it does not, which on the subway feeds is every row
+    -- measured on the wire 0 of 419 vehicle positions carried a descriptor and
+    -- 419 carried an nyct train id
+    -- dim_vehicle_assignment keys on this so it has something to track
+    coalesce(vehicle_id, nyct_train_id) as vehicle_key,
+
     trip_id,
     route_id,
     cast(direction_id as integer) as direction_id,

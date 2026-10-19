@@ -45,7 +45,7 @@
 with positions as (
 
     select
-        vehicle_id,
+        vehicle_key,
         service_date,
         feed_id,
         trip_id,
@@ -55,7 +55,7 @@ with positions as (
         reported_at,
         reported_at_ms
     from {{ ref('stg_vehicle_positions') }}
-    where vehicle_id is not null
+    where vehicle_key is not null
 
 ),
 
@@ -68,7 +68,7 @@ with positions as (
 deduplicated as (
 
     select
-        vehicle_id,
+        vehicle_key,
         service_date,
         trip_id,
         route_id,
@@ -77,7 +77,7 @@ deduplicated as (
         reported_at,
         reported_at_ms,
         row_number() over (
-            partition by vehicle_id, reported_at_ms
+            partition by vehicle_key, reported_at_ms
             order by feed_id, trip_id nulls last
         ) as observation_rank
     from positions
@@ -87,7 +87,7 @@ deduplicated as (
 observations as (
 
     select
-        vehicle_id,
+        vehicle_key,
         service_date,
         trip_id,
         route_id,
@@ -103,7 +103,7 @@ observations as (
 with_previous as (
 
     select
-        vehicle_id,
+        vehicle_key,
         service_date,
         trip_id,
         route_id,
@@ -111,10 +111,10 @@ with_previous as (
         is_assigned,
         reported_at,
         reported_at_ms,
-        lag(trip_id) over (partition by vehicle_id order by reported_at_ms)      as prev_trip_id,
-        lag(route_id) over (partition by vehicle_id order by reported_at_ms)     as prev_route_id,
-        lag(direction_id) over (partition by vehicle_id order by reported_at_ms) as prev_direction_id,
-        lag(is_assigned) over (partition by vehicle_id order by reported_at_ms)  as prev_is_assigned
+        lag(trip_id) over (partition by vehicle_key order by reported_at_ms)      as prev_trip_id,
+        lag(route_id) over (partition by vehicle_key order by reported_at_ms)     as prev_route_id,
+        lag(direction_id) over (partition by vehicle_key order by reported_at_ms) as prev_direction_id,
+        lag(is_assigned) over (partition by vehicle_key order by reported_at_ms)  as prev_is_assigned
     from observations
 
 ),
@@ -127,7 +127,7 @@ with_previous as (
 change_flags as (
 
     select
-        vehicle_id,
+        vehicle_key,
         service_date,
         trip_id,
         route_id,
@@ -149,7 +149,7 @@ change_flags as (
 versioned as (
 
     select
-        vehicle_id,
+        vehicle_key,
         service_date,
         trip_id,
         route_id,
@@ -158,7 +158,7 @@ versioned as (
         reported_at,
         reported_at_ms,
         sum(is_change) over (
-            partition by vehicle_id
+            partition by vehicle_key
             order by reported_at_ms
             rows between unbounded preceding and current row
         ) as version_group
@@ -173,7 +173,7 @@ versioned as (
 collapsed as (
 
     select
-        vehicle_id,
+        vehicle_key,
         version_group,
         min(service_date)                      as service_date,
         min(reported_at)                       as valid_from,
@@ -185,16 +185,16 @@ collapsed as (
         max(direction_id)                      as direction_id,
         max(cast(is_assigned as integer)) = 1   as is_assigned
     from versioned
-    group by vehicle_id, version_group
+    group by vehicle_key, version_group
 
 ),
 
 final as (
 
     select
-        {{ scd2_surrogate_key(['vehicle_id', 'version_group'], 'valid_from') }}
+        {{ scd2_surrogate_key(['vehicle_key', 'version_group'], 'valid_from') }}
                           as vehicle_assignment_sk,
-        vehicle_id,
+        vehicle_key,
         service_date,
         trip_id,
         route_id,
@@ -203,14 +203,14 @@ final as (
         valid_from,
         valid_from_ms,
         coalesce(
-            lead(valid_from) over (partition by vehicle_id order by valid_from_ms),
+            lead(valid_from) over (partition by vehicle_key order by valid_from_ms),
             {{ far_future_timestamp() }}
         )                 as valid_to,
         -- is_current is derived from valid_to never stored independently two
         -- sources of truth for "current" is how SCD2 tables end up with two
         -- current rows
         case
-            when lead(valid_from) over (partition by vehicle_id order by valid_from_ms) is null
+            when lead(valid_from) over (partition by vehicle_key order by valid_from_ms) is null
             then true else false
         end               as is_current,
         last_observed_at,
@@ -218,11 +218,11 @@ final as (
         cast(
             {{ datediff_seconds(
                  'valid_from',
-                 'coalesce(lead(valid_from) over (partition by vehicle_id order by valid_from_ms), last_observed_at)'
+                 'coalesce(lead(valid_from) over (partition by vehicle_key order by valid_from_ms), last_observed_at)'
                ) }} as integer
         )                 as assignment_duration_seconds,
         version_group     as scd_version,
-        current_timestamp as dbt_updated_at
+        {{ now_timestamp() }} as dbt_updated_at
     from collapsed
 
 )

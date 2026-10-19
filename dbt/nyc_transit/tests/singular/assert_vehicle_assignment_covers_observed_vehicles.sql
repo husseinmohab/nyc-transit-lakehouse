@@ -3,13 +3,13 @@
 -- entirely means the window partitioning dropped it most likely on a null key
 
 with observed as (
-  select distinct vehicle_id from {{ ref('stg_vehicle_positions') }}
-  where vehicle_id is not null
+  select distinct vehicle_key from {{ ref('stg_vehicle_positions') }}
+  where vehicle_key is not null
 ),
 dimensioned as (
-  select distinct vehicle_id from {{ ref('dim_vehicle_assignment') }}
+  select distinct vehicle_key from {{ ref('dim_vehicle_assignment') }}
 )
-select o.vehicle_id
+select o.vehicle_key
 from observed o
-left join dimensioned d on o.vehicle_id = d.vehicle_id
-where d.vehicle_id is null
+left join dimensioned d on o.vehicle_key = d.vehicle_key
+where d.vehicle_key is null

@@ -33,6 +33,13 @@ models:
               config:
                 where: "platform_stop_id is not null"
           - relationships:
+              config:
+                severity: warn
+          # warn and not error. The realtime feeds name stop ids the static
+          # stops.txt has no station for at all (R60, F17, R65, G25, H19, M07
+          # were all live and all absent), so strict referential integrity is
+          # not achievable against the real feed. Measured coverage is 99.07%.
+          # assert_stop_join_coverage_above_threshold is the hard gate at 98%.
               arguments:
                 to: ref('stg_gtfs_stops')
                 field: stop_id
@@ -50,18 +57,23 @@ models:
               arguments:
                 values: ["NORTH", "SOUTH"]
       - name: stop_sequence
+        description: >
+          Optional in GTFS-RT and unset on about 94% of NYCT stop_time_updates.
+          Where present it starts at 0, not 1.
         tests:
           - dbt_utils.accepted_range:
               arguments:
-                min_value: 1
+                min_value: 0
                 max_value: 300
                 inclusive: true
       - name: feed_timestamp_ms
         tests:
           - not_null
       - name: is_skipped
+        description: >
+          NULL when the feed sends no stop level schedule_relationship, which it
+          does on a small share of real rows.
         tests:
-          - not_null
           - accepted_values:
               arguments:
                 values: [true, false]
@@ -103,6 +115,19 @@ models:
         tests:
           - not_null
       - name: vehicle_id
+        description: >
+          The GTFS vehicle descriptor id. NULL on the NYCT subway feeds, which
+          send no descriptor at all (measured: 0 of 419 live entities). No
+          not_null test because the feed genuinely does not supply it.
+      - name: nyct_train_id
+        description: >
+          The NYCT physical train id, from the vendored nyct-subway extension
+          compiled by `make proto`. Present on every subway row and NULL on
+          feeds that carry no NYCT extension.
+      - name: vehicle_key
+        description: >
+          coalesce(vehicle_id, nyct_train_id), the identity of the physical
+          unit. This is what dim_vehicle_assignment keys on.
         tests:
           - not_null
       - name: route_id
@@ -140,16 +165,26 @@ models:
               arguments:
                 values: ["INCOMING_AT", "STOPPED_AT", "IN_TRANSIT_TO"]
       - name: position_is_plausible
+        description: >
+          NULL when the feed publishes no position, which on the NYCT subway
+          feeds is every row.
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "latitude is not null"
       - name: is_assigned
         tests:
           - not_null
     tests:
       - dbt_utils.unique_combination_of_columns:
+          config:
+            # Keyed on vehicle_key, which is never NULL on either feed shape.
+            # event_id remains the declared key; this asserts the natural key
+            # holds too.
+            severity: error
           arguments:
             combination_of_columns:
-              - vehicle_id
+              - vehicle_key
               - reported_at_ms
               - feed_id
 
