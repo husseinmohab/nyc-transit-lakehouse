@@ -23,9 +23,9 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from typing import Any
 
-from google.transit import gtfs_realtime_pb2
-
+from nyc_transit.gtfs.proto import gtfs_realtime_pb2, nyct_subway_pb2
 from nyc_transit.gtfs.static_reference import (
     PLATFORM_SUFFIXES,
     routes_with_stops,
@@ -267,7 +267,11 @@ class SyntheticFeedGenerator:
 
         trip_rng = random.Random(trip_id)
         publication_rng = random.Random(f"{trip_id}|{feed_timestamp_epoch}")
-        tu.vehicle.id = f"veh-{route}-{trip_rng.randint(1, 400):03d}"
+        self._set_trip_extension(
+            tu.trip,
+            self._train_id(route, trip_rng.randint(1, 99)),
+            "N" if tu.trip.direction_id == 0 else "S",
+        )
 
         if trip_rng.random() < self.config.cancellation_fraction:
             # A cancellation carries no stop_time_updates the normalizer still
@@ -311,10 +315,29 @@ class SyntheticFeedGenerator:
                     gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED
                 )
 
-    def _vehicle_id(self, route: str, index: int) -> str:
-        return f"veh-{route}-{index:03d}"
+    def _train_id(self, route: str, index: int) -> str:
+        """an nyct style physical train id
 
-    def _current_assignment(self, vehicle_id: str, route: str) -> str | None:
+        the real feed sends things like "1A 1715+ 207/LEF" and no gtfs vehicle
+        descriptor at all so this mirrors that
+        """
+        return f"{index:02d}{route} {1500 + index:04d}+ SYN/SYN"
+
+    def _set_trip_extension(self, trip: Any, train_id: str, direction: str) -> None:
+        """attach the nyct trip extension
+
+        compiled from the vendored proto by `make proto` so the generator can
+        produce the same enrichment columns the live feed carries
+        """
+        ext = trip.Extensions[nyct_subway_pb2.nyct_trip_descriptor]
+        ext.train_id = train_id
+        ext.direction = (
+            nyct_subway_pb2.NyctTripDescriptor.Direction.NORTH
+            if direction == "N"
+            else nyct_subway_pb2.NyctTripDescriptor.Direction.SOUTH
+        )
+
+    def _current_assignment(self, train_id: str, route: str) -> str | None:
         """the trip this vehicle is working after evolving it
 
         per poll unassigned_probability makes it unassigned
@@ -324,14 +347,14 @@ class SyntheticFeedGenerator:
         shape scd2 models
         """
         if self._rng.random() < self.config.unassigned_probability:
-            self._fleet[vehicle_id] = None
+            self._fleet[train_id] = None
         elif (
             self._rng.random() < self.config.reassignment_probability
-            or vehicle_id not in self._fleet
-            or self._fleet[vehicle_id] is None
+            or train_id not in self._fleet
+            or self._fleet[train_id] is None
         ):
-            self._fleet[vehicle_id] = self._trip_id(route, self._rng.randint(0, 14_399))
-        return self._fleet[vehicle_id]
+            self._fleet[train_id] = self._trip_id(route, self._rng.randint(0, 14_399))
+        return self._fleet[train_id]
 
     def _add_vehicle(
         self,
@@ -345,9 +368,9 @@ class SyntheticFeedGenerator:
         entity = message.entity.add()
         vp = entity.vehicle
 
-        vehicle_id = self._vehicle_id(route, vehicle_index)
-        entity.id = f"vp-{vehicle_id}"
-        trip_id = self._current_assignment(vehicle_id, route)
+        train_id = self._train_id(route, vehicle_index)
+        entity.id = f"vp-{train_id}"
+        trip_id = self._current_assignment(train_id, route)
 
         if trip_id is not None:
             vp.trip.trip_id = trip_id
@@ -361,8 +384,14 @@ class SyntheticFeedGenerator:
             # have to handle
             vp.trip.route_id = route
 
-        vp.vehicle.id = vehicle_id
+        # No vehicle descriptor, which is what the nyct subway feeds do
+        # measured on the wire 0 of 419 vehicle positions carried one
+        # the identity comes from the nyct extension instead and vehicle_key in
+        # staging coalesces the two
+        self._set_trip_extension(vp.trip, train_id, self._rng.choice(PLATFORM_SUFFIXES))
         vp.timestamp = feed_timestamp_epoch - self._rng.randint(0, 30)
+        # Positions are kept even though the subway feeds send none, because the
+        # bus and commuter rail feeds do and position_is_plausible needs data
         # Roughly the NYC bounding box Plausible coordinates not real ones
         vp.position.latitude = 40.577 + self._rng.random() * 0.335
         vp.position.longitude = -74.041 + self._rng.random() * 0.316

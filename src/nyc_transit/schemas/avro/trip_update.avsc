@@ -39,7 +39,7 @@
     {"name": "start_time", "type": ["null", "string"], "default": null, "doc": "GTFS HH:MM:SS, may exceed 24:00:00."},
     {"name": "schedule_relationship", "type": ["null", "string"], "default": null, "doc": "Trip-level: SCHEDULED | ADDED | UNSCHEDULED | CANCELED | REPLACEMENT | DUPLICATED | DELETED"},
 
-    {"name": "nyct_train_id", "type": ["null", "string"], "default": null, "doc": "NYCT extension; null when nyct_subway_pb2 is unavailable. See docs/limitations.md."},
+    {"name": "nyct_train_id", "type": ["null", "string"], "default": null, "doc": "NYCT extension; null when nyct_subway_pb2 is unavailable."},
     {"name": "nyct_direction", "type": ["null", "string"], "default": null},
     {"name": "nyct_is_assigned", "type": ["null", "boolean"], "default": null}
   ]

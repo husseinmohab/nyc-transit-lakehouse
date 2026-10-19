@@ -8,3 +8,6 @@ ruff>=0.5
 black>=24.4
 mypy>=1.10
 types-protobuf
+# protoc, for `make proto`. Build time only, the services import the generated
+# modules and never this.
+grpcio-tools>=1.60

@@ -68,6 +68,17 @@ class TestSyntheticConfig:
         assert low <= SMALL.mean_records_per_message() <= high
 
 
+def _train_id(trip):
+    """the nyct train id off a trip descriptor
+
+    the generator sends no gtfs vehicle descriptor because the real subway feed
+    does not either, so the unit identity lives on the nyct extension
+    """
+    from nyc_transit.gtfs.proto import nyct_subway_pb2
+
+    return trip.Extensions[nyct_subway_pb2.nyct_trip_descriptor].train_id
+
+
 class TestSyntheticGenerator:
     def test_is_reproducible_for_a_fixed_seed(self):
         a = SyntheticFeedGenerator(SMALL).build_feed_message(feed_timestamp_epoch=1_793_536_000)
@@ -128,7 +139,7 @@ class TestSyntheticGenerator:
         message = SyntheticFeedGenerator(config).build_feed_message(
             feed_timestamp_epoch=1_793_536_000
         )
-        vehicle_ids = [e.vehicle.vehicle.id for e in message.entity if e.HasField("vehicle")]
+        vehicle_ids = [_train_id(e.vehicle.trip) for e in message.entity if e.HasField("vehicle")]
         assert len(vehicle_ids) == len(set(vehicle_ids))
 
     def test_fleet_assignments_persist_across_messages(self):
@@ -151,7 +162,7 @@ class TestSyntheticGenerator:
         for poll in range(3):
             message = generator.build_feed_message(feed_timestamp_epoch=1_793_536_000 + poll * 30)
             assignments.append(
-                {e.vehicle.vehicle.id: e.vehicle.trip.trip_id for e in message.entity}
+                {_train_id(e.vehicle.trip): e.vehicle.trip.trip_id for e in message.entity}
             )
         assert assignments[0] == assignments[1] == assignments[2]
 

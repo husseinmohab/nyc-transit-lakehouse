@@ -33,10 +33,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from google.transit import gtfs_realtime_pb2
-
 from nyc_transit.gtfs.decoder import enum_name
 from nyc_transit.gtfs.nyct import trip_extension
+from nyc_transit.gtfs.proto import gtfs_realtime_pb2
 
 # MTA service dates are expressed in agency-local time
 AGENCY_TZ = ZoneInfo("America/New_York")
@@ -475,5 +474,11 @@ def partition_key(record: dict[str, Any]) -> str:
     if record_type == "trip_update":
         return f"{record['service_date']}|{record.get('trip_id') or record.get('entity_id')}"
     if record_type == "vehicle_position":
-        return f"{record['service_date']}|{record.get('vehicle_id') or record.get('entity_id')}"
+        # the unit identity in preference order
+        # gtfs vehicle id, then the nyct train id which is the only one the
+        # subway feed gives, then the feed's entity id as a last resort
+        # entity_id works but is assigned by the feed and not the unit so it is
+        # the weakest of the three for an ordering key
+        unit = record.get("vehicle_id") or record.get("nyct_train_id") or record.get("entity_id")
+        return f"{record['service_date']}|{unit}"
     return f"alert|{record.get('entity_id')}"

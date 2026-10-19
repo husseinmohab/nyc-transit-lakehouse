@@ -9,7 +9,8 @@ freshness sla fire on the second but not the first
 from __future__ import annotations
 
 from google.protobuf.message import DecodeError
-from google.transit import gtfs_realtime_pb2
+
+from nyc_transit.gtfs.proto import gtfs_realtime_pb2
 
 SUPPORTED_GTFS_RT_VERSIONS = frozenset({"1.0", "2.0"})
 

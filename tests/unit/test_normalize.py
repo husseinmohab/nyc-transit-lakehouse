@@ -8,7 +8,6 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from google.transit import gtfs_realtime_pb2
 
 from nyc_transit.gtfs.decoder import FeedDecodeError, decode_feed
 from nyc_transit.gtfs.normalize import (
@@ -20,6 +19,7 @@ from nyc_transit.gtfs.normalize import (
     partition_key,
     service_date_from_epoch,
 )
+from nyc_transit.gtfs.proto import gtfs_realtime_pb2
 
 ENVELOPE_FIELDS = {
     "event_id",
@@ -393,9 +393,16 @@ class TestPartitionKey:
                 by_trip.setdefault(record["trip_id"], set()).add(partition_key(record))
         assert all(len(keys) == 1 for keys in by_trip.values())
 
-    def test_vehicles_key_on_vehicle(self, fixture_records):
+    def test_vehicles_key_on_the_unit(self, fixture_records):
+        """the nyct train id when the feed sends no vehicle descriptor
+
+        keying on the feed's entity_id instead would work but entity_id belongs
+        to the feed and not to the unit
+        """
         vehicle = next(r for r in fixture_records if r["record_type"] == "vehicle_position")
-        assert partition_key(vehicle).endswith(vehicle["vehicle_id"])
+        assert vehicle["vehicle_id"] is None
+        assert vehicle["nyct_train_id"]
+        assert partition_key(vehicle).endswith(vehicle["nyct_train_id"])
 
 
 class TestDecoder:

@@ -68,6 +68,15 @@ jobs:
         run: |
           python -m pip install -r requirements/dev.txt
           python -m pip install -e . --no-deps
+      - name: Compile the vendored protobuf sources
+        # The nyct extension is not in the gtfs-realtime-bindings wheel, so the
+        # generated modules are built here rather than committed. Without this
+        # nothing that imports nyc_transit.gtfs resolves.
+        run: |
+          python -m pip install "grpcio-tools>=1.60"
+          python -m grpc_tools.protoc -I proto --python_out=src \
+            proto/nyc_transit/gtfs/proto/gtfs-realtime.proto \
+            proto/nyc_transit/gtfs/proto/nyct-subway.proto
 
       - name: Cache Ivy/Maven jars
         # The Iceberg + Kafka + spark-avro jars are ~120 MB and are fetched by
@@ -114,6 +123,15 @@ jobs:
         run: |
           python -m pip install -r requirements/base.txt
           python -m pip install -e . --no-deps
+      - name: Compile the vendored protobuf sources
+        # The nyct extension is not in the gtfs-realtime-bindings wheel, so the
+        # generated modules are built here rather than committed. Without this
+        # nothing that imports nyc_transit.gtfs resolves.
+        run: |
+          python -m pip install "grpcio-tools>=1.60"
+          python -m grpc_tools.protoc -I proto --python_out=src \
+            proto/nyc_transit/gtfs/proto/gtfs-realtime.proto \
+            proto/nyc_transit/gtfs/proto/nyct-subway.proto
 
       - name: Regenerate seeds
         run: python scripts/generate_dbt_seeds.py
@@ -234,6 +252,15 @@ jobs:
             --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${{ env.PYTHON_VERSION }}.txt"
           python -m pip install -r requirements/base.txt
           python -m pip install -e . --no-deps
+      - name: Compile the vendored protobuf sources
+        # The nyct extension is not in the gtfs-realtime-bindings wheel, so the
+        # generated modules are built here rather than committed. Without this
+        # nothing that imports nyc_transit.gtfs resolves.
+        run: |
+          python -m pip install "grpcio-tools>=1.60"
+          python -m grpc_tools.protoc -I proto --python_out=src \
+            proto/nyc_transit/gtfs/proto/gtfs-realtime.proto \
+            proto/nyc_transit/gtfs/proto/nyct-subway.proto
 
       - name: Import every DAG and assert the expected dag_ids
         # `DagBag` import is the real check: a DAG that raises at parse time is

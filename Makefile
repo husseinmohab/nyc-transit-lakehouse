@@ -33,6 +33,7 @@ venv: ## Create the virtualenv and install everything (python3.12 required)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements/dev.txt
 	$(PIP) install -e . --no-deps
+	$(MAKE) proto
 	@echo "venv ready: source $(VENV)/bin/activate"
 
 .PHONY: deps
@@ -68,6 +69,13 @@ test-fast: ## Unit tests only; skips anything that boots a SparkSession
 cov: ## Tests with a coverage report
 	$(PYTEST) --cov=nyc_transit --cov-report=term-missing --cov-report=html
 	@echo "HTML report: htmlcov/index.html"
+
+.PHONY: proto
+proto: ## Compile the vendored protobuf sources into src/
+	$(PY) -m grpc_tools.protoc -I proto --python_out=src \
+	  proto/nyc_transit/gtfs/proto/gtfs-realtime.proto \
+	  proto/nyc_transit/gtfs/proto/nyct-subway.proto
+	@echo "generated: src/nyc_transit/gtfs/proto/*_pb2.py"
 
 .PHONY: seeds
 seeds: ## Regenerate the dbt seed CSVs from the fixture (deterministic)
