@@ -2,60 +2,60 @@
 
 [![CI](https://github.com/husseinmohab/nyc-transit-lakehouse/actions/workflows/ci.yml/badge.svg)](https://github.com/husseinmohab/nyc-transit-lakehouse/actions/workflows/ci.yml)
 
-Streams MTA GTFS-Realtime feeds through Kafka into an Apache Iceberg lakehouse on
-S3, with Spark Structured Streaming, dbt, Airflow, Great Expectations and
-Terraform.
+MTA GTFS-Realtime feeds to Kafka to Apache Iceberg on S3
+Spark Structured Streaming, dbt, Airflow, Great Expectations, Terraform
 
-## Architecture
+Run against real AWS: live feeds through MSK over SASL/IAM into Iceberg on S3
+through the Glue catalog
+
+## architecture
 
 ```mermaid
 flowchart TB
     subgraph src["MTA GTFS-Realtime"]
-        F1["8 subway feeds<br/>trip updates + vehicle positions"]
-        F2["subway alerts"]
-        F3["LIRR / Metro-North"]
-        F4["bus feeds"]
+        F1["8 subway + alerts"]
+        F2["LIRR / MNR / bus"]
     end
 
-    subgraph ingest["Producer (Python)"]
-        P["GtfsRealtimePoller<br/>conditional GET on ETag<br/>per feed failure isolation"]
-        N["normalize()<br/>protobuf to 3 record types<br/>deterministic event_id"]
-        A["Avro single object encoding"]
+    subgraph ingest["producer"]
+        P["poller<br/>conditional GET on ETag"]
+        N["normalize<br/>deterministic event_id"]
+        A["avro single object encoding"]
     end
 
     subgraph kafka["Kafka / MSK"]
-        K1["mta.gtfs.trip_updates.v1 (12p)"]
-        K2["mta.gtfs.vehicle_positions.v1 (6p)"]
-        K3["mta.gtfs.alerts.v1 (3p)"]
+        K1["trip_updates.v1 (12p)"]
+        K2["vehicle_positions.v1 (6p)"]
+        K3["alerts.v1 (3p)"]
     end
 
     subgraph spark["Spark Structured Streaming"]
-        S["foreachBatch + MERGE INTO<br/>one checkpoint per query<br/>failOnDataLoss=true"]
+        S["foreachBatch + MERGE INTO<br/>one checkpoint per query"]
     end
 
-    subgraph lake["Apache Iceberg on S3 (Glue catalog)"]
-        B["bronze<br/>trip_updates, vehicle_positions, alerts<br/>replay substrate, never rewritten"]
-        SI["silver<br/>trip_stop_predictions, vehicle_positions,<br/>alert_informed_entities"]
-        L["bronze._stream_commits<br/>commit ledger"]
+    subgraph lake["Iceberg on S3 (Glue)"]
+        B["bronze<br/>replay substrate"]
+        SI["silver"]
+        L["_stream_commits<br/>commit ledger"]
     end
 
     subgraph dbt["dbt"]
-        ST["staging (5 views)"]
-        DIM["dim_route, dim_stop<br/>dim_vehicle_assignment (SCD2)"]
-        SNAP["snap_route_alert_status<br/>dbt snapshot (SCD2)"]
-        FCT["fct_trip_stop_prediction<br/>fct_stop_arrival_estimate"]
-        AGG["agg_route_service_hourly<br/>dq_prediction_quality_daily<br/>dq_pipeline_freshness"]
+        ST["staging"]
+        DIM["dims + SCD2 vehicle assignment"]
+        SNAP["route status snapshot (SCD2)"]
+        FCT["2 facts"]
+        AGG["agg + dq marts"]
     end
 
     subgraph orch["Airflow"]
-        D1["gtfs_streaming_supervisor<br/>every 15 min"]
-        D2["gtfs_silver_backfill<br/>daily, partition scoped"]
-        D3["iceberg_maintenance<br/>weekly compaction"]
+        D1["supervisor"]
+        D2["backfill"]
+        D3["maintenance"]
     end
 
-    GE["Great Expectations<br/>freshness SLA + partition integrity<br/>fails the DAG"]
+    GE["Great Expectations<br/>freshness SLA<br/>fails the DAG"]
 
-    F1 & F2 & F3 & F4 --> P --> N --> A
+    F1 & F2 --> P --> N --> A
     A --> K1 & K2 & K3
     K1 & K2 & K3 --> S
     S --> B
@@ -74,154 +74,175 @@ flowchart TB
     GE -.->|probe| SI
 ```
 
-## How it works
+## how it works
 
-A Python service polls the MTA's GTFS-Realtime protobuf endpoints and normalizes
-each `FeedMessage` into three record types: stop level trip predictions, vehicle
-positions and service alerts. Records go to Kafka as Avro with a deterministic
-`event_id` hashed from the business key, so re polling an unchanged feed produces
-byte identical records.
+- producer polls the GTFS-RT endpoints, conditional GET on ETag
+- `event_id` is a blake2b hash of the business key so a repoll of an unchanged
+  feed is byte identical
+- the nyct extension is compiled from vendored protos by `make proto`, which is
+  what makes `nyct_train_id` the unit identity on a feed that sends no gtfs
+  vehicle descriptor
+- one `foreachBatch` writes bronze and its silver projection, both `MERGE INTO`
+  keyed on `event_id`
+- at least once delivery plus idempotent keyed apply so a replayed batch is a
+  no op
+- bronze is never rewritten which makes it the replay substrate
+- dbt adds staging, dims, 2 facts at 2 grains, quality marts
+- SCD2 twice, hand rolled for vehicle assignment and a dbt snapshot for route
+  status
+- Airflow supervises the stream, runs partition scoped backfills gated by Great
+  Expectations freshness SLAs, compacts Iceberg weekly
 
-Spark Structured Streaming consumes each topic and, inside one `foreachBatch`,
-maintains both the Iceberg bronze table and its silver projection with an
-idempotent `MERGE INTO`. Delivery is at least once and application is idempotent
-and keyed, so a replayed micro batch is a no op and the tables converge. Bronze
-is never rewritten, which makes it the replay substrate: a bad silver transform
-is a ten minute backfill rather than lost data.
+grain, table properties and design notes in
+[docs/data_model.md](docs/data_model.md)
 
-dbt builds staging views, dimensions including a hand rolled SCD2 vehicle
-assignment dimension and a dbt snapshot of route service status, two facts at two
-grains, and quality marts. Airflow supervises the stream, runs partition scoped
-backfills gated by Great Expectations freshness SLAs, and runs weekly Iceberg
-compaction. Terraform under `infra/` provisions MSK, S3, the Glue catalog and
-three least privilege IAM roles.
+## benchmarks
 
-## Performance
+the load generator runs the production path
+build FeedMessage, protobuf, decode, normalize, avro encode, sink
+not a loop over prebuilt dicts
 
-The load generator runs the production path end to end: build a `FeedMessage`,
-serialize to protobuf, decode, normalize, Avro encode, hand to a sink. It is not
-a loop over pre built dicts, so the figure is the rate this code turns feed bytes
-into Kafka ready records.
+Apple M4, 10 cores, 16 GB, Python 3.12, single process
 
-Apple M4, 10 cores, 16 GB, Python 3.12, single process:
-
-| Run | Target | Achieved | Throughput |
+| run | target | achieved | throughput |
 |---|---|---|---|
 | `--target-eps 2000` | 2,000/s | **2,003/s** (100.2%) | 0.43 MB/s |
 | `--target-eps 0` | unthrottled | **56,704/s** | 12.1 MB/s |
 | `--target-eps 0 --serialization json` | unthrottled | **83,985/s** | 68.5 MB/s |
 
-Avro averages about 215 bytes per record against JSON's 855. JSON encodes roughly
-1.5x faster per record but costs 4x the bytes, paid again on every Kafka write,
-every replication hop and every S3 read, so Avro is the default.
+avro is ~215 bytes per record against JSON 855
+JSON encodes ~1.5x faster and costs 4x the bytes, paid again on every Kafka
+write, replication hop and S3 read
 
-A record is one stop level arrival or departure prediction, which is the grain
-the lakehouse stores. One poll of one subway feed expands to roughly 2,000 to
-6,000 of these, since each trip carries 8 to 24 downstream stop predictions.
-
-Reproduce it:
+a record is one stop level prediction
+one poll of one subway feed expands to 2,000 to 6,000 of them
 
 ```bash
-make bench            # 2,000 events/sec for 30s, no broker needed
-make bench-ceiling    # unthrottled, this machine's limit
+make bench            # 2,000 events/sec for 30s, no broker
+make bench-ceiling    # unthrottled
 make bench-kafka      # end to end into the local broker
 ```
 
-`make bench` exits non zero if a throttled run lands under 95% of target, so it
-asserts the number instead of printing it. Method and full results are in
-[docs/benchmark.md](docs/benchmark.md).
+`make bench` exits non zero under 95% of target so it asserts the number
+method and full results in [docs/benchmark.md](docs/benchmark.md)
 
-## Quickstart
+## tests
+
+430 pytest, 168 dbt
+CI runs lint, pytest, dbt parse + compile + build, terraform fmt + validate,
+Airflow DAG import, seed drift, and a double partition run for idempotency
+
+## quickstart
 
 ```bash
-git clone https://github.com/husseinmohab/nyc-transit-lakehouse.git
-cd nyc-transit-lakehouse
-make venv     # python3.12 venv, dev deps, editable install
-make test     # pytest, including the Spark and Iceberg tests
+make venv     # venv, dev deps, editable install
+make test     # pytest including Spark and Iceberg
+make deps
+make dbt-build   # dbt on DuckDB over the committed seeds, no warehouse needed
 ```
 
-The Spark tests fetch the Iceberg runtime jar from Maven on first run, about
-120 MB, cached in `~/.ivy2`.
+Spark tests fetch the Iceberg jar from Maven on first run, ~120 MB, cached in
+`~/.ivy2`
 
-Build the dbt project against DuckDB over the committed seeds, so no warehouse is
-needed:
-
-```bash
-make deps        # dbt deps
-make dbt-build   # seed then build: models, the snapshot and every test
-```
-
-Bring up the local stack:
+local stack
 
 ```bash
-make up           # Kafka (KRaft) + MinIO + topics + the streaming job
+make up           # Kafka (KRaft) + MinIO + topics + streaming job
 make up-airflow   # also Postgres and Airflow
 make up-tools     # also Kafka UI
 ```
 
-| Service | URL |
+| service | url |
 |---|---|
-| Kafka | `localhost:9092` from the host, `kafka:29092` in network |
-| MinIO console | <http://localhost:9001> (minioadmin / minioadmin) |
+| Kafka | `localhost:9092` host, `kafka:29092` in network |
+| MinIO | <http://localhost:9001> (minioadmin / minioadmin) |
 | Airflow | <http://localhost:8080> (admin / admin) |
 | Kafka UI | <http://localhost:8085> |
 
-Then replay synthetic load, or poll the real MTA:
+feed it
 
 ```bash
 docker compose -f docker/docker-compose.yml --profile bench run --rm loadgen
 docker compose -f docker/docker-compose.yml --profile live up -d producer
 ```
 
-The subway and commuter rail feeds have needed no API key since 2023. The NYC bus
-feeds still require a OneBusAway key; without one they are skipped rather than
-faked.
-
-Inspect without running anything:
+subway and commuter rail need no API key
+NYC bus needs a OneBusAway key and is skipped without one
 
 ```bash
 make show-ddl   # every CREATE TABLE and ALTER ... WRITE ORDERED BY
-make feeds      # which GTFS-RT feeds would be polled, as JSON
-make help       # all 34 targets
+make feeds      # feeds that would be polled, as JSON
+make help
 ```
 
-## Deploying to AWS
+## deploying to aws
 
-`infra/` is four Terraform modules: `s3_lakehouse`, `msk`, `glue_catalog` and
-`iam`. MSK uses SASL/IAM so the producer and the Spark jobs authenticate with the
-same task role they use for S3 and Glue, and no Kafka password exists anywhere.
+seven modules
+`s3_lakehouse` `msk` `glue_catalog` `iam` `vpc` `athena` `test_host`
+
+MSK is SASL/IAM only so there is no Kafka password anywhere and no public broker
+endpoint, clients run in the VPC
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars   # set vpc_id and private_subnet_ids
+cp terraform.tfvars.example terraform.tfvars   # create_network, or your own vpc_id
 terraform init
-terraform plan
 terraform apply
-terraform output env_file_preview               # env settings for the services
+terraform output env_file_preview
 ```
-
-Point the services at it by switching the catalog:
 
 ```bash
+PREFIX=$(terraform -chdir=infra output -raw glue_database_prefix)
 export LAKEHOUSE_CATALOG_TYPE=glue
 export LAKEHOUSE_WAREHOUSE=s3://<bucket>/warehouse
+export LAKEHOUSE_BRONZE_NAMESPACE=${PREFIX}_bronze
+export LAKEHOUSE_SILVER_NAMESPACE=${PREFIX}_silver
 export KAFKA_BOOTSTRAP_SERVERS=$(terraform -chdir=infra output -raw msk_bootstrap_brokers_sasl_iam)
-export KAFKA_SECURITY_PROTOCOL=SASL_SSL
 export KAFKA_SASL_MECHANISM=AWS_MSK_IAM
+export KAFKA_AWS_REGION=us-east-1
 ```
 
-dbt switches target with `dbt build --target spark`; the models are unchanged.
+```bash
+python -m nyc_transit.streaming.jobs --create-tables --load-static
+SPARK_DRIVER_MEMORY=4g python -m nyc_transit.streaming.jobs --job bronze_trip_updates
+```
 
-## Requirements
+dbt runs the same models on athena, no cluster and no JVM
 
-Python 3.11 or newer (3.12 recommended), JDK 17 for pyspark, Docker for the local
-stack, Terraform 1.6 or newer for `infra/`.
+```bash
+export DBT_ATHENA_WORKGROUP=$(terraform -chdir=infra output -raw athena_workgroup)
+export DBT_ATHENA_S3_STAGING_DIR=$(terraform -chdir=infra output -raw athena_results_uri)
+DBT_ATHENA_SCHEMA=${PREFIX}_marts DBT_SNAPSHOT_SCHEMA=${PREFIX}_snapshots \
+  dbt build --target athena --vars "{glue_db_prefix: $PREFIX, silver_schema: ${PREFIX}_silver}"
+```
 
-Dependencies are split by concern (`base`, `spark`, `dbt`, `quality`, `airflow`)
-because Airflow only resolves against its own constraints file, and mixing that
-with pyspark, dbt and great-expectations in one resolution produces an unbootable
-scheduler.
+the `spark_session` target is still there for a cluster that already exists
+the dbt snapshot does not run on it, see
+[docs/data_model.md](docs/data_model.md)
 
-## License
+gotchas, all found by running it, detail in
+[docs/data_model.md](docs/data_model.md)
+- namespaces must be the real Glue database names
+- the driver needs more than its 1 GB default or the Kafka admin client OOMs
+- point `SPARK_LOCAL_DIRS` at the EBS volume, `/tmp` is a RAM backed tmpfs
+- the iceberg runtime is pinned at 1.10.2, 1.7.1 crashes the jvm on a
+  vectorized parquet read
+- static tables come from `--load-static` on the spark path, `dbt seed` on the
+  athena path
+- teardown needs the buckets emptied first, `force_destroy` is unset on purpose
 
-MIT, see [LICENSE](LICENSE).
+verified on real AWS
+9 live feeds through MSK into Iceberg on S3 through Glue, then 14 dbt models,
+the snapshot and 165 dbt tests on athena with 2 expected warnings
+
+## requirements
+
+Python 3.11+, JDK 17 for pyspark, Docker for the local stack, Terraform 1.6+
+
+deps split by concern (`base` `spark` `dbt` `quality` `airflow`)
+Airflow only resolves against its own constraints file and mixing that with
+pyspark and dbt in one resolution gives an unbootable scheduler
+
+## license
+
+MIT
