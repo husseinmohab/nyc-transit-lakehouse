@@ -127,6 +127,15 @@ def catalog_conf(settings: LakehouseSettings) -> dict[str, str]:
         conf["spark.hadoop.fs.s3a.aws.credentials.provider"] = (
             "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
         )
+        # Iceberg reads and writes table data through S3FileIO which talks to
+        # the aws sdk directly and is happy with s3://
+        # the streaming checkpoint is not a table it goes through the hadoop
+        # filesystem api and hadoop only registers s3a:// so a checkpoint on
+        # s3:// dies with UnsupportedFileSystemException no FileSystem for
+        # scheme s3 the moment the query starts
+        # mapping the scheme means one s3:// path works for both
+        for scheme in ("s3", "s3n"):
+            conf[f"spark.hadoop.fs.{scheme}.impl"] = "org.apache.hadoop.fs.s3a.S3AFileSystem"
 
     return conf
 

@@ -57,6 +57,25 @@ class TestSparkOptions:
         assert "IAMLoginModule" in options["kafka.sasl.jaas.config"]
         assert "IAMClientCallbackHandler" in options["kafka.sasl.client.callback.handler.class"]
 
+    def test_msk_iam_forces_tls_on_the_source(self, monkeypatch):
+        """the mechanism alone is not enough
+
+        security_protocol defaults to PLAINTEXT and msk only listens for iam on
+        tls the failure is describeTopics timing out which reads like a network
+        problem rather than a protocol one
+        """
+        monkeypatch.setenv("KAFKA_SASL_MECHANISM", "AWS_MSK_IAM")
+        monkeypatch.setenv("KAFKA_AWS_REGION", "us-east-1")
+        assert msk_iam_options(Settings())["kafka.security.protocol"] == "SASL_SSL"
+
+    def test_the_source_options_override_a_plaintext_default(self, monkeypatch):
+        from nyc_transit.streaming.jobs import JOBS, kafka_source_options
+
+        monkeypatch.setenv("KAFKA_SASL_MECHANISM", "AWS_MSK_IAM")
+        monkeypatch.setenv("KAFKA_AWS_REGION", "us-east-1")
+        options = kafka_source_options(Settings(), JOBS[0], starting_offsets="latest")
+        assert options["kafka.security.protocol"] == "SASL_SSL"
+
     def test_the_jar_is_only_added_for_msk_iam(self):
         """without the jar the driver dies on ClassNotFoundException
 

@@ -126,11 +126,19 @@ class IdempotentMergeWriter:
         shaped = target.transform(batch_df) if target.transform else batch_df
         shaped = shaped.select(*target.columns)
 
+        # foreachBatch hands over a DataFrame belonging to a CLONED session, so
+        # a temp view registered on it is invisible to the session this writer
+        # was built with. Running the MERGE off self.spark fails with
+        # TABLE_OR_VIEW_NOT_FOUND on the batch view. Real tables resolve from
+        # either session, which is why only the temp view path breaks and why
+        # calling _merge_one directly in a test never shows it.
+        session = shaped.sparkSession
+
         raw_view = f"_batch_{self._view_suffix}_{abs(hash(target.table)) % 10**6}"
         shaped.createOrReplaceTempView(raw_view)
 
         deduped_view = f"{raw_view}_dedup"
-        self.spark.sql(
+        session.sql(
             dedup_within_batch_sql(
                 source_view=raw_view,
                 merge_key=target.merge_key,
@@ -139,12 +147,12 @@ class IdempotentMergeWriter:
         ).createOrReplaceTempView(deduped_view)
 
         rows_in = shaped.count()
-        rows_after = self.spark.table(deduped_view).count()
+        rows_after = session.table(deduped_view).count()
         if rows_after == 0:
             log.debug("batch %s: nothing to merge into %s", batch_id, target.table)
             return
 
-        self.spark.sql(
+        session.sql(
             merge_sql(
                 target_table=target.table,
                 source_view=deduped_view,
