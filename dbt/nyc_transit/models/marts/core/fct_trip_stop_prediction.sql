@@ -1,9 +1,14 @@
+{#
+  partition_by is the dbt-spark spelling and partitioned_by the dbt-athena one
+  each engine is handed only the key it understands
+#}
 {{
   config(
     materialized = 'incremental',
     unique_key = 'event_id',
     incremental_strategy = 'merge' if target.type != 'duckdb' else 'delete+insert',
-    partition_by = ['service_date'] if target.type != 'duckdb' else none,
+    partition_by = ['service_date'] if target.type == 'spark' else none,
+    partitioned_by = ['service_date'] if target.type == 'athena' else none,
     tags = ['marts', 'fact']
   )
 }}
@@ -92,7 +97,7 @@ enriched as (
             else true
         end as stop_resolved,
 
-        current_timestamp as dbt_updated_at
+        {{ now_timestamp() }} as dbt_updated_at
 
     from predictions p
     left join {{ ref('dim_route') }} r on p.route_id = r.route_id

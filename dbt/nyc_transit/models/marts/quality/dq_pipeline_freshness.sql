@@ -58,9 +58,9 @@ select
     partition_count,
     max_lag_seconds_sla,
     severity,
-    current_timestamp as measured_at,
+    {{ now_timestamp() }} as measured_at,
     cast(
-        {{ datediff_seconds('max_event_time', 'current_timestamp') }} as bigint
+        {{ datediff_seconds('max_event_time', now_timestamp()) }} as bigint
     )                 as lag_seconds,
 
     -- Against the committed seeds this is always breached because the seeds are
@@ -70,7 +70,7 @@ select
     -- A test that can only pass on live data fails CI every day and gets
     -- deleted
     case
-        when cast({{ datediff_seconds('max_event_time', 'current_timestamp') }} as bigint)
+        when cast({{ datediff_seconds('max_event_time', now_timestamp()) }} as bigint)
              > max_lag_seconds_sla
         then true else false
     end               as sla_breached

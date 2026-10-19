@@ -11,12 +11,12 @@
       version opened hashed rather than sequenced because a sequence is not
       stable across a full refresh and a dimension whose keys change on rebuild
       cannot be referenced by a fact that was not rebuilt with it. -#}
-  md5(
-    {%- for column in business_key_columns %}
-      coalesce(cast({{ column }} as varchar), '~') || '|' ||
-    {%- endfor %}
-      coalesce(cast({{ valid_from_column }} as varchar), '~')
-  )
+  {%- set parts = [] -%}
+  {%- for column in business_key_columns -%}
+    {%- do parts.append("coalesce(" ~ as_text(column) ~ ", '~')") -%}
+  {%- endfor -%}
+  {%- do parts.append("coalesce(" ~ as_text(valid_from_column) ~ ", '~')") -%}
+  {{ hash_text(parts | join(" || '|' || ")) }}
 {% endmacro %}
 
 
@@ -29,8 +29,8 @@
       most. -#}
   (
   {%- for column in tracked_columns %}
-      coalesce(cast({{ column }} as varchar), '~#NULL#~')
-        <> coalesce(cast({{ previous_alias }}_{{ column }} as varchar), '~#NULL#~')
+      coalesce({{ as_text(column) }}, '~#NULL#~')
+        <> coalesce({{ as_text(previous_alias ~ '_' ~ column) }}, '~#NULL#~')
       {%- if not loop.last %} or {% endif %}
   {%- endfor %}
   )

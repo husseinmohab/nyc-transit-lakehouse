@@ -1,9 +1,14 @@
+{#
+  partition_by is the dbt-spark spelling and partitioned_by the dbt-athena one
+  each engine is handed only the key it understands
+#}
 {{
   config(
     materialized = 'incremental',
     unique_key = 'trip_stop_sk',
     incremental_strategy = 'merge' if target.type != 'duckdb' else 'delete+insert',
-    partition_by = ['service_date'] if target.type != 'duckdb' else none,
+    partition_by = ['service_date'] if target.type == 'spark' else none,
+    partitioned_by = ['service_date'] if target.type == 'athena' else none,
     tags = ['marts', 'fact']
   )
 }}
@@ -98,10 +103,9 @@ revisions as (
 )
 
 select
-    md5(
-        cast(l.service_date as varchar) || '|' ||
-        l.trip_id || '|' || l.platform_stop_id
-    ) as trip_stop_sk,
+    {{ hash_text(
+         as_text('l.service_date') ~ " || '|' || l.trip_id || '|' || l.platform_stop_id"
+       ) }} as trip_stop_sk,
     l.service_date,
     l.trip_id,
     l.route_id,
@@ -137,7 +141,7 @@ select
     l.is_skipped,
     l.is_cancelled_trip,
     l.is_added_trip,
-    current_timestamp as dbt_updated_at
+    {{ now_timestamp() }} as dbt_updated_at
 
 from latest l
 inner join earliest e

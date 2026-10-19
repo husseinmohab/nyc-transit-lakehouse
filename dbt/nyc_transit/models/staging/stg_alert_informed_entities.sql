@@ -1,4 +1,4 @@
-{{ config(materialized = 'view', tags = ['staging', 'alerts']) }}
+{{ config(materialized = 'table' if target.type == 'spark' else 'view', tags = ['staging', 'alerts']) }}
 
 with source as (
   select * from {{ source('lakehouse', 'silver_alert_informed_entities') }}

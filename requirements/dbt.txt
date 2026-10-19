@@ -3,7 +3,14 @@
 dbt-core>=1.10,<2
 dbt-duckdb>=1.9,<2
 duckdb>=1.0
-# The spark targets. The [session] extra is what the spark_session target uses
-# and it needs nothing running; the thrift target additionally needs
-# dbt-spark[PyHive] and a Spark Thrift Server to connect to.
+# Athena is the production transform engine. Serverless, reads and writes the
+# Iceberg tables through the Glue catalog, and supports views, which an Iceberg
+# Spark catalog does not.
+dbt-athena>=1.9,<2
+
+# The spark targets are kept for a cluster that already exists. The [session]
+# extra is what spark_session uses and needs nothing running; the thrift target
+# additionally needs dbt-spark[PyHive] and a Thrift Server. Note the dbt
+# snapshot cannot run on either against an Iceberg catalog; see
+# docs/data_model.md.
 dbt-spark[session]>=1.9,<2

@@ -53,7 +53,7 @@ select
     observed.avg_arrival_uncertainty_seconds,
     case when observed.stop_id is null then false else true end as has_realtime_data,
 
-    current_timestamp                             as dbt_updated_at
+    {{ now_timestamp() }}                             as dbt_updated_at
 
 from stops
 left join observed on stops.stop_id = observed.stop_id

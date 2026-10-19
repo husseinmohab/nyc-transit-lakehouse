@@ -55,7 +55,7 @@ select
 
     r.route_short_name,
     r.division,
-    current_timestamp as dbt_updated_at
+    {{ now_timestamp() }} as dbt_updated_at
 
 from estimates e
 left join {{ ref('dim_route') }} r on e.route_id = r.route_id

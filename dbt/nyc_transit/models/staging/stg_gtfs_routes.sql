@@ -1,4 +1,4 @@
-{{ config(materialized = 'view', tags = ['staging', 'static']) }}
+{{ config(materialized = 'table' if target.type == 'spark' else 'view', tags = ['staging', 'static']) }}
 
 select
     route_id,

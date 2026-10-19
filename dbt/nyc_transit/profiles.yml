@@ -1,18 +1,20 @@
-# Two targets, one model tree.
+# Four targets, one model tree. No model changes between them.
 #
-# `duckdb` (default) is the local and CI target. It reads the committed seeds, so
-# `dbt build` runs on a laptop with no cluster, no Kafka and no AWS.
+# `duckdb` is the default and the local and CI target. It reads the committed
+# seeds so `dbt build` runs on a laptop with no cluster, no Kafka and no AWS.
 #
-# `spark` is the production target: the identical models compiled against the
-# Iceberg tables through a Spark Thrift Server backed by the Glue catalog.
-# Switching is `dbt build --target spark`; no model changes.
+# `athena` is the production target. Same models, same Glue catalog, serverless,
+# no JVM, and it supports views so `dbt snapshot` runs. An Iceberg catalog on
+# Spark cannot replace a view, which is what a snapshot does on every run after
+# the first, so the snapshot only works here. See docs/data_model.md.
 #
-# `spark_session` is the same thing without the Thrift Server. dbt builds its
-# own in-process SparkSession, which is how a single host runs the models
-# against Glue and S3 with nothing else listening.
+# `spark` and `spark_session` are kept for a cluster that already exists.
+# `spark` goes through a Thrift Server, `spark_session` builds its own
+# in process SparkSession and needs nothing listening. Both run the models and
+# the tests, neither runs the snapshot.
 #
-# A real deployment reads host/credentials from the environment (see
-# docker/.env.example and infra/modules/iam). No secrets live in this file.
+# A real deployment reads host and credentials from the environment, see
+# docker/.env.example and infra/modules/iam. No secrets live in this file.
 nyc_transit:
   target: duckdb
   outputs:
@@ -23,6 +25,19 @@ nyc_transit:
       schema: main
       extensions:
         - parquet
+
+    athena:
+      type: athena
+      # The workgroup pins the results location and the per query scan ceiling,
+      # so nothing here can point queries somewhere unbudgeted.
+      work_group: "{{ env_var('DBT_ATHENA_WORKGROUP', 'nyc-transit-lakehouse-dev') }}"
+      s3_staging_dir: "{{ env_var('DBT_ATHENA_S3_STAGING_DIR', 's3://change-me/athena-results/') }}"
+      region_name: "{{ env_var('AWS_REGION', 'us-east-1') }}"
+      database: awsdatacatalog
+      schema: "{{ env_var('DBT_ATHENA_SCHEMA', 'marts') }}"
+      threads: 4
+      # Iceberg for everything, which is what the streaming layer writes.
+      table_type: iceberg
 
     spark:
       type: spark

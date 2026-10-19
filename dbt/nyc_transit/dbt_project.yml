@@ -24,12 +24,22 @@ vars:
   # predictions for a trip for minutes after it ends, and a late-arriving
   # Kafka batch can land after midnight, so a 1-day lookback would drop rows.
   incremental_lookback_days: 2
+  # Prefix for the Glue databases on the spark targets, which is the
+  # glue_database_prefix output of the terraform stack. Empty on duckdb, where
+  # generate_schema_name keeps dbt's own naming.
+  glue_db_prefix: ""
 
 models:
   nyc_transit:
+    # file_format is the dbt-spark key and table_type the dbt-athena one, both
+    # saying iceberg. table_type has to be a model config and not a profile
+    # key, otherwise dbt-athena assumes hive and refuses the merge strategy.
     +file_format: iceberg
+    +table_type: iceberg
     staging:
-      +materialized: view
+      # materialized is set per model and not here. Iceberg's SparkCatalog
+      # cannot hold a view at all, so the staging layer has to materialise on
+      # spark, and `target` is only in scope inside a model's config block.
       +schema: staging
     marts:
       +schema: marts
@@ -40,7 +50,13 @@ models:
 
 snapshots:
   nyc_transit:
-    +target_schema: snapshots
+    +table_type: iceberg
+    # target_schema is used literally and does not pass through
+    # generate_schema_name, so the glue database prefix has to be applied here
+    # too or the snapshot looks for a database called plain "snapshots".
+    # env_var and not var: this file is rendered before CLI vars are merged, so
+    # a var() here always falls back to its default.
+    +target_schema: "{{ env_var('DBT_SNAPSHOT_SCHEMA', 'snapshots') }}"
     +file_format: iceberg
 
 # Seeds land in the target's default schema so the `lakehouse` / `gtfs_static`
@@ -51,49 +67,53 @@ snapshots:
 # silently breaks every join against the realtime data (where the same ids
 # arrive as strings from protobuf). This is the single most load-bearing block
 # in this file.
+#
+# `string` and not `varchar`: both targets accept string, while Spark rejects a
+# bare varchar with DATATYPE_MISSING_SIZE and wants varchar(n).
 seeds:
   nyc_transit:
     gtfs_routes:
       +column_types:
-        route_id: varchar
-        route_short_name: varchar
-        route_long_name: varchar
-        route_color: varchar
-        division: varchar
+        route_id: string
+        route_short_name: string
+        route_long_name: string
+        route_color: string
+        division: string
     gtfs_stops:
       +column_types:
-        stop_id: varchar
-        stop_name: varchar
-        borough: varchar
-        served_by_routes: varchar
+        stop_id: string
+        stop_name: string
+        borough: string
+        served_by_routes: string
     silver_trip_stop_predictions:
       +column_types:
-        event_id: varchar
-        feed_id: varchar
-        trip_id: varchar
-        route_id: varchar
-        vehicle_id: varchar
-        stop_id: varchar
+        event_id: string
+        feed_id: string
+        trip_id: string
+        route_id: string
+        vehicle_id: string
+        stop_id: string
         feed_timestamp_ms: bigint
     silver_vehicle_positions:
       +column_types:
-        event_id: varchar
-        feed_id: varchar
-        vehicle_id: varchar
-        trip_id: varchar
-        route_id: varchar
-        stop_id: varchar
-        current_status: varchar
+        event_id: string
+        feed_id: string
+        vehicle_id: string
+        nyct_train_id: string
+        trip_id: string
+        route_id: string
+        stop_id: string
+        current_status: string
         reported_at_ms: bigint
     silver_alert_informed_entities:
       +column_types:
-        alert_event_id: varchar
-        entity_id: varchar
-        agency_id: varchar
-        route_id: varchar
-        stop_id: varchar
-        trip_id: varchar
-        alert_cause: varchar
-        alert_effect: varchar
-        header_text: varchar
+        alert_event_id: string
+        entity_id: string
+        agency_id: string
+        route_id: string
+        stop_id: string
+        trip_id: string
+        alert_cause: string
+        alert_effect: string
+        header_text: string
         feed_timestamp_ms: bigint

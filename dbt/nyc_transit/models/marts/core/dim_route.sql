@@ -71,7 +71,7 @@ select
     -- eight so this is a flag not a filter
     case when observed.route_id is null then false else true end as has_realtime_data,
 
-    current_timestamp                               as dbt_updated_at
+    {{ now_timestamp() }}                               as dbt_updated_at
 
 from routes
 left join observed on routes.route_id = observed.route_id

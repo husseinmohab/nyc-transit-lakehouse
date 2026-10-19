@@ -1,8 +1,16 @@
 {% snapshot snap_route_alert_status %}
 
+{#
+  file_format is declared here and not only in dbt_project.yml
+  dbt-spark branches on target_relation.is_iceberg to decide where to put the
+  snapshot's staging view since an iceberg catalog cannot hold a view at all
+  without it the second run fails with "Replacing a view is not supported"
+#}
+
 {{
   config(
-    target_schema = 'snapshots',
+    target_schema = env_var('DBT_SNAPSHOT_SCHEMA', 'snapshots'),
+    file_format = 'iceberg',
     unique_key = 'route_id',
     strategy = 'check',
     check_cols = ['service_status', 'alert_effect', 'alert_cause', 'open_alert_count'],

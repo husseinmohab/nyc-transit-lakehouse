@@ -1,6 +1,6 @@
 {{
   config(
-    materialized = 'view',
+    materialized = 'table' if target.type == 'spark' else 'view',
     tags = ['staging', 'trip_updates']
   )
 }}

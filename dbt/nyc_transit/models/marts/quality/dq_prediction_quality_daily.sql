@@ -59,7 +59,7 @@ select
         as double
     ) as stability_score,
 
-    current_timestamp as dbt_updated_at
+    {{ now_timestamp() }} as dbt_updated_at
 
 from base
 group by service_date, route_id
