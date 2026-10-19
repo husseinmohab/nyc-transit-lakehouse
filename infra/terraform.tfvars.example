@@ -1,10 +1,10 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
 #
-# NOTE: nothing in this repository has been applied to an AWS account. The
-# configuration is validated with `terraform fmt -check` and
-# `terraform validate` in CI (see .github/workflows/terraform.yml), which
-# checks syntax, types and module wiring but NOT that AWS accepts it.
-# docs/limitations.md says so plainly.
+# This stack has been applied to a real account and torn down again. CI only
+# runs `terraform fmt -check` and `terraform validate`, which check syntax,
+# types and module wiring but not that AWS accepts it, so the apply is what
+# found the Glue resource policy ARN rule, the dead Kafka 3.6.0 version and the
+# MSK configuration name needing to be unique.
 
 aws_region  = "us-east-1"
 project     = "nyc-transit-lakehouse"

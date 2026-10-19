@@ -197,7 +197,9 @@ variable "bronze_transition_to_ia_days" {
 variable "glue_database_names" {
   description = "Glue databases, one per medallion layer."
   type        = list(string)
-  default     = ["bronze", "silver", "marts", "snapshots"]
+  # staging is here because dbt's staging models need a database of their own
+  # on the spark target; see dbt/nyc_transit/macros/generate_schema_name.sql.
+  default = ["bronze", "silver", "marts", "snapshots", "staging"]
 }
 
 variable "tags" {

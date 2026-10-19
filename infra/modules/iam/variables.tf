@@ -11,3 +11,15 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "athena_workgroup_name" {
+  description = "Workgroup the dbt role may run queries in."
+  type        = string
+  default     = ""
+}
+
+variable "athena_results_prefix" {
+  description = "Prefix in the lakehouse bucket holding Athena query results."
+  type        = string
+  default     = "athena-results"
+}

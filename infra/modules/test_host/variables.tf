@@ -47,3 +47,9 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "athena_workgroup_name" {
+  description = "Workgroup the harness may run dbt queries in."
+  type        = string
+  default     = ""
+}

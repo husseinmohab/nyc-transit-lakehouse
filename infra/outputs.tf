@@ -71,3 +71,13 @@ output "glue_database_prefix" {
   EOT
   value       = replace(local.name_prefix, "-", "_")
 }
+
+output "athena_workgroup" {
+  description = "dbt --target athena runs here."
+  value       = module.athena.workgroup_name
+}
+
+output "athena_results_uri" {
+  description = "What dbt-athena takes as s3_staging_dir."
+  value       = module.athena.results_uri
+}

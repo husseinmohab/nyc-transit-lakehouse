@@ -65,6 +65,16 @@ module "msk" {
   tags                 = local.common_tags
 }
 
+# Athena is the transform engine for dbt against the Glue catalog. Serverless,
+# so this is a workgroup and a results prefix rather than a cluster.
+module "athena" {
+  source = "./modules/athena"
+
+  name_prefix         = local.name_prefix
+  results_bucket_name = module.s3_lakehouse.bucket_name
+  tags                = local.common_tags
+}
+
 module "iam" {
   source = "./modules/iam"
 
@@ -76,6 +86,7 @@ module "iam" {
   msk_cluster_arn       = module.msk.cluster_arn
   msk_cluster_name      = module.msk.cluster_name
   kafka_topic_names     = keys(var.kafka_topics)
+  athena_workgroup_name = module.athena.workgroup_name
   tags                  = local.common_tags
 }
 
@@ -103,6 +114,7 @@ module "test_host" {
   lakehouse_bucket_arn  = module.s3_lakehouse.bucket_arn
   lakehouse_bucket_name = module.s3_lakehouse.bucket_name
   glue_database_names   = var.glue_database_names
+  athena_workgroup_name = module.athena.workgroup_name
 
   tags = local.common_tags
 }

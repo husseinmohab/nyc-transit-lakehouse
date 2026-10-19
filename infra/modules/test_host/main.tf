@@ -109,9 +109,17 @@ resource "aws_iam_role_policy_attachment" "ssm" {
 
 data "aws_iam_policy_document" "harness" {
   statement {
-    sid       = "ConnectToCluster"
-    effect    = "Allow"
-    actions   = ["kafka-cluster:Connect", "kafka-cluster:DescribeCluster"]
+    sid    = "ConnectToCluster"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:Connect",
+      "kafka-cluster:DescribeCluster",
+      # Cluster level, not topic level. The producer runs with
+      # enable.idempotence=true, and without this the broker refuses to hand
+      # out a producer id: CLUSTER_AUTHORIZATION_FAILED on the first flush,
+      # which reads like an auth problem rather than a missing action.
+      "kafka-cluster:WriteDataIdempotently",
+    ]
     resources = [var.msk_cluster_arn]
   }
 
@@ -161,6 +169,27 @@ data "aws_iam_policy_document" "harness" {
   }
 
   statement {
+    sid    = "RunAthenaQueries"
+    effect = "Allow"
+    actions = [
+      "athena:StartQueryExecution",
+      "athena:GetQueryExecution",
+      "athena:GetQueryResults",
+      "athena:GetQueryResultsStream",
+      "athena:StopQueryExecution",
+      "athena:GetWorkGroup",
+      "athena:GetDataCatalog",
+      "athena:ListDatabases",
+      "athena:ListTableMetadata",
+      "athena:GetTableMetadata",
+    ]
+    resources = [
+      "arn:${local.partition}:athena:${var.aws_region}:${local.account_id}:workgroup/${var.athena_workgroup_name}",
+      "arn:${local.partition}:athena:${var.aws_region}:${local.account_id}:datacatalog/AwsDataCatalog",
+    ]
+  }
+
+  statement {
     sid    = "GlueCatalog"
     effect = "Allow"
     actions = [
@@ -171,6 +200,10 @@ data "aws_iam_policy_document" "harness" {
       "glue:DeleteTable",
       "glue:GetTable",
       "glue:GetTables",
+      "glue:GetTableVersion",
+      "glue:GetTableVersions",
+      "glue:DeleteTableVersion",
+      "glue:BatchDeleteTableVersion",
       "glue:GetPartition",
       "glue:GetPartitions",
       "glue:BatchCreatePartition",

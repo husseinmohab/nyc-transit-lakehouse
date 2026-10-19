@@ -36,8 +36,7 @@ resource "aws_glue_catalog_database" "layers" {
 # access through IAM policies on the Glue actions (see modules/iam). If the
 # account has Lake Formation enabled in its default state, the IAM-only path
 # continues to work; an account with LF enforcement on would additionally need
-# aws_lakeformation_permissions, which is noted in docs/limitations.md rather
-# than guessed at here.
+# aws_lakeformation_permissions, which is left out rather than guessed at.
 
 resource "aws_glue_resource_policy" "catalog_read" {
   # Restricts who may read the catalog to this account. Glue's default is

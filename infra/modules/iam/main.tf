@@ -317,6 +317,10 @@ data "aws_iam_policy_document" "dbt_lakehouse" {
       "glue:GetDatabases",
       "glue:GetTable",
       "glue:GetTables",
+      "glue:GetTableVersion",
+      "glue:GetTableVersions",
+      "glue:DeleteTableVersion",
+      "glue:BatchDeleteTableVersion",
       "glue:CreateTable",
       "glue:UpdateTable",
       "glue:DeleteTable",
@@ -348,6 +352,48 @@ data "aws_iam_policy_document" "dbt_lakehouse" {
       [for arn in local.glue_table_arns : arn if strcontains(arn, "_bronze/")],
     )
   }
+}
+
+data "aws_iam_policy_document" "dbt_athena" {
+  statement {
+    sid    = "RunQueriesInTheWorkgroup"
+    effect = "Allow"
+    actions = [
+      "athena:StartQueryExecution",
+      "athena:GetQueryExecution",
+      "athena:GetQueryResults",
+      "athena:GetQueryResultsStream",
+      "athena:StopQueryExecution",
+      "athena:GetWorkGroup",
+      "athena:GetDataCatalog",
+      "athena:ListDatabases",
+      "athena:ListTableMetadata",
+      "athena:GetTableMetadata",
+    ]
+    resources = [
+      "arn:${local.partition}:athena:${var.aws_region}:${local.account_id}:workgroup/${var.athena_workgroup_name}",
+      "arn:${local.partition}:athena:${var.aws_region}:${local.account_id}:datacatalog/AwsDataCatalog",
+    ]
+  }
+
+  statement {
+    sid    = "ReadWriteQueryResults"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:AbortMultipartUpload",
+      "s3:ListMultipartUploadParts",
+    ]
+    resources = ["${var.lakehouse_bucket_arn}/${var.athena_results_prefix}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "dbt_athena" {
+  name   = "athena"
+  role   = aws_iam_role.dbt.id
+  policy = data.aws_iam_policy_document.dbt_athena.json
 }
 
 resource "aws_iam_role_policy" "dbt_lakehouse" {
