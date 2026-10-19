@@ -56,7 +56,7 @@ class TestTheApostropheCase:
     def test_station_names_with_apostrophes_survive(self):
         """the reason this module exists
 
-        these two go through the dataframe api and not a sql literal
+        these two go through the dataframe api
         """
         names = {s["stop_name"] for s in stop_rows() if "'" in s["stop_name"]}
         assert names == {"E 143 St-St Mary's St", "Prince's Bay"}

@@ -1,6 +1,6 @@
 """shared fixtures
 
-the spark session is module scoped and not function scoped
+the spark session is module scoped
 starting one costs 10-20 seconds between the jvm and the iceberg jar so a
 function scoped fixture would eat the whole suite
 tests drop and recreate their tables instead which gives isolation for free

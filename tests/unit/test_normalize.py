@@ -50,7 +50,7 @@ class TestServiceDate:
         """2026-11-01 is the US DST end date so the offset changes mid-day
 
         Both instants are the same service date which only holds if the
-        conversion goes through zoneinfo rather than a fixed offset
+        conversion goes through zoneinfo, never a fixed offset
         """
         before = int(dt.datetime(2026, 11, 1, 5, 0, tzinfo=dt.UTC).timestamp())  # 01:00 EDT
         after = int(dt.datetime(2026, 11, 1, 7, 0, tzinfo=dt.UTC).timestamp())  # 02:00 EST
@@ -85,7 +85,7 @@ class TestEventId:
     def test_distinguishes_part_boundaries(self):
         """("A1","B") and ("A","1B") must not collide
 
-        They would under a naive ''.join which is why the parts are joined on
+        They would under a naive ''.join, so the parts are joined on
         the unit separator
         """
         assert make_event_id("A1", "B") != make_event_id("A", "1B")
@@ -397,7 +397,7 @@ class TestPartitionKey:
         """the nyct train id when the feed sends no vehicle descriptor
 
         keying on the feed's entity_id instead would work but entity_id belongs
-        to the feed and not to the unit
+        to the feed, never to the unit
         """
         vehicle = next(r for r in fixture_records if r["record_type"] == "vehicle_position")
         assert vehicle["vehicle_id"] is None

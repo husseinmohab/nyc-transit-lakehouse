@@ -24,7 +24,7 @@ from nyc_transit.schemas import (
 )
 
 # An independent CRC-64-AVRO so the framing is checked against the Avro spec
-# rather than against the library that produced it
+# not against the library that produced it
 _EMPTY = 0xC15D213AA4D7A795
 _MASK = (1 << 64) - 1
 

@@ -1,16 +1,12 @@
-# ---------------------------------------------------------------------------
 # A single in-VPC host used to prove the stack runs against real AWS.
 #
-# This module is a test harness, not part of the production design. Production
-# runs the producer and the Spark job as separate workloads holding the
-# separate roles in modules/iam, which is the point of splitting those roles.
-# One EC2 instance can hold exactly one instance profile, so the role here is
-# the union of the producer and streaming permissions. It is named and tagged
-# so it is obvious in the console that it is not one of the three.
+# A test harness. Production runs the producer and the Spark job as separate
+# workloads holding the separate roles in modules/iam. One EC2 instance can hold
+# one instance profile, so the role here is the union of the producer and
+# streaming permissions, named and tagged so the console makes that obvious.
 #
-# Access is through SSM Session Manager. There is no SSH key to manage, no
-# inbound security group rule at all, and nothing to rotate afterwards.
-# ---------------------------------------------------------------------------
+# Access is through SSM Session Manager. No SSH key to manage, no inbound
+# security group rule, nothing to rotate afterwards.
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
@@ -52,13 +48,11 @@ locals {
   ]
 }
 
-# ---------------------------------------------------------------------------
 # Security group: egress only.
 #
 # Nothing connects to this host. Kafka is an outbound connection to the
 # brokers, and the MSK security group admits it by CIDR, so there is no
 # inbound rule here and no cross-referenced group.
-# ---------------------------------------------------------------------------
 resource "aws_security_group" "this" {
   name        = "${var.name_prefix}-test-host"
   description = "Egress only. Reaches MSK, S3, Glue, SSM and the MTA feeds."
@@ -75,9 +69,7 @@ resource "aws_security_group" "this" {
   tags = merge(var.tags, { Name = "${var.name_prefix}-test-host" })
 }
 
-# ---------------------------------------------------------------------------
 # Role
-# ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "trust" {
   statement {
     sid     = "AllowEc2"
@@ -228,9 +220,7 @@ resource "aws_iam_instance_profile" "this" {
   tags = var.tags
 }
 
-# ---------------------------------------------------------------------------
 # Instance
-# ---------------------------------------------------------------------------
 resource "aws_instance" "this" {
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.instance_type

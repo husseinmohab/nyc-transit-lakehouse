@@ -16,7 +16,7 @@ from nyc_transit.quality.freshness import FRESHNESS_SLAS, FreshnessObservation, 
 
 log = logging.getLogger(__name__)
 
-# Columns whose unit is epoch milliseconds rather than a timestamp type
+# Columns carrying epoch milliseconds, not a timestamp type
 _EPOCH_MS_COLUMNS = frozenset({"feed_timestamp_ms", "ingest_timestamp_ms", "reported_at_ms"})
 
 
@@ -29,13 +29,13 @@ def observation_sql(
 ) -> str:
     """sql giving one row of row_count and max_event_time_epoch_seconds
 
-    the event time column gets normalised to epoch seconds in sql and not in python
+    the event time column gets normalised to epoch seconds in sql
     so a timestamp column and an epoch ms column come out the same shape and the
     caller needs no per table branching
 
     the partition filter is what makes this cheap
     on a partitioned iceberg table it prunes to one partitions metadata so the probe
-    is a metadata read and not a scan
+    reads metadata only
     """
     column = sla.event_time_column
     if column in _EPOCH_MS_COLUMNS:

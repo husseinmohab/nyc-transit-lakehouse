@@ -1,19 +1,13 @@
-# ---------------------------------------------------------------------------
-# Three roles, one per workload, scoped to what that workload actually does.
+# One role per workload.
 #
-# producer  : Kafka WRITE only. No S3. No Glue.
-# streaming : Kafka READ + S3/Glue WRITE. No Kafka write.
-# dbt       : S3/Glue read-write on silver+marts, S3 READ on bronze. No Kafka.
+# producer: Kafka write
+# streaming: Kafka read, S3 and Glue write
+# dbt: S3 and Glue read-write on silver and marts, S3 read on bronze
 #
-# Splitting them matters because of what each one cannot do. The producer holds
-# the only credential exposed to the public internet (it polls api-endpoint.mta.info),
-# so it must not be able to touch the lakehouse. The dbt role runs user-authored
-# SQL, so it must not be able to delete bronze. Bronze is the replay substrate
-# and losing it turns a transform bug into permanent data loss.
-#
-# Every policy is resource-scoped. There is no "*" resource on a mutating
-# action anywhere in this file.
-# ---------------------------------------------------------------------------
+# The producer polls api-endpoint.mta.info, so it holds the only credential
+# exposed to the internet and it cannot reach the lakehouse. The dbt role runs
+# hand-written SQL and cannot delete bronze, which the backfill replays from.
+# Every policy is scoped to a resource ARN.
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
@@ -34,7 +28,7 @@ locals {
 
   # MSK SASL/IAM authorises at cluster, topic and group granularity. The topic
   # ARN pattern embeds the cluster's unique id, so it is derived from the
-  # cluster ARN rather than reconstructed.
+  # cluster ARN, never reconstructed.
   msk_arn_parts     = split("/", var.msk_cluster_arn)
   msk_cluster_uuid  = element(local.msk_arn_parts, length(local.msk_arn_parts) - 1)
   msk_topic_arn_fmt = "arn:${local.partition}:kafka:${var.aws_region}:${local.account_id}:topic/${var.msk_cluster_name}/${local.msk_cluster_uuid}"
@@ -43,13 +37,11 @@ locals {
   bronze_prefix = "${var.lakehouse_bucket_arn}/warehouse/bronze/*"
 }
 
-# ---------------------------------------------------------------------------
 # Trust policy
 #
 # ECS tasks and EC2 instances only. Deliberately NOT a wildcard principal and
 # NOT an IAM user: there is no long-lived access key anywhere in this design,
 # which is why src/nyc_transit/streaming/session.py never reads one.
-# ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "workload_trust" {
   statement {
     sid     = "AllowEcsAndEc2Workloads"
@@ -74,9 +66,7 @@ data "aws_iam_policy_document" "workload_trust" {
   }
 }
 
-# ---------------------------------------------------------------------------
 # Producer: Kafka write only
-# ---------------------------------------------------------------------------
 resource "aws_iam_role" "producer" {
   name               = "${var.name_prefix}-producer"
   description        = "GTFS-RT poller: publishes to MSK. No lakehouse access."
@@ -117,7 +107,7 @@ data "aws_iam_policy_document" "producer_kafka_write" {
     )
   }
 
-  # No CreateTopic. Topics are declared in Terraform; a producer that can
+  # No CreateTopic. Topics are declared in Terraform, so a producer that can
   # create them can create a misconfigured one at 03:00 and nobody will know
   # where it came from.
 }
@@ -128,9 +118,7 @@ resource "aws_iam_role_policy" "producer_kafka_write" {
   policy = data.aws_iam_policy_document.producer_kafka_write.json
 }
 
-# ---------------------------------------------------------------------------
 # Streaming: Kafka read + lakehouse write
-# ---------------------------------------------------------------------------
 resource "aws_iam_role" "streaming" {
   name               = "${var.name_prefix}-streaming"
   description        = "Spark Structured Streaming: reads MSK, writes Iceberg bronze/silver."
@@ -179,7 +167,7 @@ data "aws_iam_policy_document" "streaming_kafka_read" {
     resources = ["${local.msk_group_arn_fmt}/nyc-transit-*"]
   }
 
-  # No WriteData. The streaming job is a consumer; if it could produce, a bug
+  # No WriteData. The streaming job is a consumer, and if it could produce a bug
   # in a transform could write derived records back onto the raw topic.
 }
 
@@ -213,7 +201,7 @@ data "aws_iam_policy_document" "streaming_lakehouse_write" {
 
     resources = [
       "${var.lakehouse_bucket_arn}/warehouse/*",
-      # Checkpoints are the exactly-once mechanism; the streaming role is the
+      # Checkpoints are the exactly-once mechanism and the streaming role is the
       # only role that may write them.
       "${var.lakehouse_bucket_arn}/checkpoints/*",
     ]
@@ -241,7 +229,7 @@ data "aws_iam_policy_document" "streaming_lakehouse_write" {
   }
 
   # No glue:DeleteTable and no glue:DeleteDatabase. Dropping an Iceberg table's
-  # catalog entry orphans its entire metadata tree; that should require a human
+  # catalog entry orphans its entire metadata tree, which should require a human
   # with elevated credentials, not a Spark job.
 }
 
@@ -257,9 +245,7 @@ resource "aws_iam_role_policy" "streaming_lakehouse_write" {
   policy = data.aws_iam_policy_document.streaming_lakehouse_write.json
 }
 
-# ---------------------------------------------------------------------------
 # dbt / Airflow transformation role
-# ---------------------------------------------------------------------------
 resource "aws_iam_role" "dbt" {
   name               = "${var.name_prefix}-dbt"
   description        = "dbt and Airflow transformations: silver/marts read-write, bronze read-only."
@@ -402,9 +388,7 @@ resource "aws_iam_role_policy" "dbt_lakehouse" {
   policy = data.aws_iam_policy_document.dbt_lakehouse.json
 }
 
-# ---------------------------------------------------------------------------
 # Shared: CloudWatch Logs for all three workloads
-# ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "cloudwatch_logs" {
   statement {
     sid    = "WriteOwnLogStreams"

@@ -110,8 +110,8 @@ def _schemas() -> tuple[Any, Any]:
 def load_static_reference(spark: Any, settings: LakehouseSettings) -> dict[str, int]:
     """create or replace the two static tables and hand back the row counts
 
-    createOrReplace and not append so running it twice is a no op rather than a
-    duplicate the tables are a snapshot not a history
+    createOrReplace, so running it twice lands the same two tables. they hold a
+    snapshot of the published files, not a history
     """
     route_schema, stop_schema = _schemas()
     namespace = f"{settings.catalog_name}.{settings.static_namespace}"

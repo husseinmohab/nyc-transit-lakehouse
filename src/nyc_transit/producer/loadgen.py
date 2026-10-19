@@ -6,7 +6,7 @@ sink
 so the reported events/sec is the rate this code turns feed bytes into kafka
 ready records
 
-three targets
+targets
 
 --target null decodes normalizes and encodes with no broker
 --target memory does the same and keeps the payloads
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.json_out).write_text(result.render() + "\n")
 
     # Non-zero exit when a throttled run could not keep up so the Makefile
-    # target asserts the claim rather than just printing a number
+    # the target asserts the claim, it does not only print a number
     if result.achieved_fraction is not None and result.achieved_fraction < 0.95:
         log.error(
             "achieved only %.1f%% of the %.0f eps target",

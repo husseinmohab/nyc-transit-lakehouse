@@ -11,7 +11,7 @@ the data since read cost grows with their number
 expire_snapshots drops snapshots past the 7 day retention the backfills rollback
 path needs
 remove_orphan_files cleans up files left by failed commits with a conservative
-older_than of 3 days and not hours because deleting a live in flight file is the
+older_than of 3 days, since deleting a live in flight file is the
 one maintenance action that destroys data
 
 sunday 05:00 utc is the lowest mta service volume so compaction competes least

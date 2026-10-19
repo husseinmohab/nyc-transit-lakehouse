@@ -1,7 +1,7 @@
 """load generator and benchmark tests
 
 the throughput asserts use an injected fake clock so they test the rate
-controller and not how fast the ci box is
+controller, independent of how fast the ci box is
 a test that asserts 2000 events/sec on this machine fails on a loaded runner and
 gets deleted
 """
@@ -96,7 +96,7 @@ class TestSyntheticGenerator:
 
         Regression guard for the bug the dbt grain test caught a re-emitted
         trip used to get freshly randomised stops so it was a different fact
-        with a different event_id rather than a duplicate
+        with a different event_id
         """
         from nyc_transit.gtfs.decoder import decode_feed
         from nyc_transit.gtfs.normalize import normalize_feed_message

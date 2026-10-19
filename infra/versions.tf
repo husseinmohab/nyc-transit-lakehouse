@@ -4,9 +4,9 @@ terraform {
   required_providers {
     aws = {
       source = "hashicorp/aws"
-      # Pinned to a minor line, not "~> 5.0": a provider minor bump has changed
-      # MSK and Glue resource defaults before, and an infra apply that drifts
-      # because CI picked up a newer provider is not a reproducible apply.
+      # Pinned to a minor line. A provider minor bump has changed MSK and Glue
+      # resource defaults before, which makes an apply drift as soon as CI picks
+      # up a newer provider.
       version = "~> 5.80"
     }
     random = {
@@ -19,7 +19,7 @@ terraform {
     }
   }
 
-  # Remote state is intentionally commented out rather than omitted: this repo
+  # Remote state is commented out, not deleted. This repo
   # is published, and a committed bucket name is a free reconnaissance gift.
   # Supply it with `terraform init -backend-config=backend.hcl`.
   #

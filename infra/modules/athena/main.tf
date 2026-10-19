@@ -1,14 +1,12 @@
-# ---------------------------------------------------------------------------
 # Athena workgroup for the dbt transform layer.
 #
-# dbt runs the same models here that it runs on DuckDB locally. Athena reads
-# and writes the Iceberg tables through the Glue catalog, so there is no
-# cluster to size and nothing to keep running between builds.
+# dbt runs the same models here that it runs on DuckDB locally, reading and
+# writing the Iceberg tables through the Glue catalog, so there is no cluster to
+# size between builds.
 #
 # This replaces running dbt through Spark. dbt-spark builds a view for its
-# snapshot staging relation and an Iceberg catalog cannot hold a view, which
-# made the snapshot unrunnable; Athena supports views natively.
-# ---------------------------------------------------------------------------
+# snapshot staging relation, an Iceberg catalog cannot hold a view, and Athena
+# supports views natively.
 
 resource "aws_athena_workgroup" "this" {
   name        = var.name_prefix

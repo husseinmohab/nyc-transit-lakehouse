@@ -4,7 +4,7 @@
   The column is computed in three places PySpark for streaming SQL for the
   backfill Python for the reference projection and seed generator this checks
   the value against its own definition from the timestamps beside it so a drift
-  in any one of the three is caught here rather than by someone noticing that a
+  in any one of the three is caught here, before someone notices that a
   dashboard looks odd
 
   One second of slack the three paths truncate rather than round and a float

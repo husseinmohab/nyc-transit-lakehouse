@@ -7,7 +7,7 @@
   the trip-level and stop-level schedule relationships were read off different
   entities
 
-  Scoped on platform_stop_id and not on stop_sequence nyct leaves
+  Scoped on platform_stop_id, since nyct leaves
   stop_sequence unset on most stop_time_updates so scoping on it would check
   about six percent of production rows
 */

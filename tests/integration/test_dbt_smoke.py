@@ -264,7 +264,7 @@ class TestGrainAndJoins:
 
     def test_stop_join_coverage_is_total_on_the_seeds(self, warehouse):
         """Every seeded stop must resolve so the dbt coverage test's 99%
-        threshold is about production's full stops.txt and not a hole in the
+        threshold is about production's full stops.txt, not a hole in the
         fixtures
 
         Scoped to rows that have a stop stop_resolved is NULL for a

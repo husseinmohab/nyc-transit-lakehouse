@@ -15,8 +15,8 @@ never off static keys
 jars come through spark.jars.packages so maven at submit time
 the coordinate gets built from config so the iceberg version is bumped in one
 place
-the spark minor version is part of the coordinate which is why
-requirements/spark.txt pins pyspark to the 3.5 line
+the spark minor version is part of the coordinate, so requirements/spark.txt
+pins pyspark to the 3.5 line
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ def iceberg_packages(
         if with_msk_iam:
             # the login module and callback handler jobs.py names in the kafka
             # options live in this jar without it the driver fails with
-            # ClassNotFoundException on IAMLoginModule and not with an auth error
+            # ClassNotFoundException on IAMLoginModule, which reads as a jar problem
             packages.append(f"software.amazon.msk:aws-msk-iam-auth:{_MSK_IAM_AUTH_VERSION}")
     if with_s3:
         packages.append(f"org.apache.hadoop:hadoop-aws:{_HADOOP_AWS_VERSION}")
@@ -123,7 +123,7 @@ def catalog_conf(settings: LakehouseSettings) -> dict[str, str]:
             )
     elif settings.warehouse.startswith("s3"):
         # Real AWS resolve credentials from the task or instance role Static
-        # keys are never read here which is why infra/modules/iam exists
+        # keys are never read here, the roles in infra/modules/iam carry the access
         conf["spark.hadoop.fs.s3a.aws.credentials.provider"] = (
             "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
         )

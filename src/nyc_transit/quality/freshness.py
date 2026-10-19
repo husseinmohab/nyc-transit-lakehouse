@@ -34,8 +34,8 @@ class Severity(StrEnum):
 class FreshnessSLA:
     """a freshness contract for one table
 
-    event_time_column has to be an event time column meaning when the mta published
-    the fact and not a load time one
+    event_time_column has to be an event time column, meaning when the mta
+    published the fact. a load time column will not do
     checking silver_loaded_at would call a stalled pipeline fresh for as long as it
     kept rewriting stale rows
 

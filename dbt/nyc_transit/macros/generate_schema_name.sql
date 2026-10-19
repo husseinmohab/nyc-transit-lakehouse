@@ -11,7 +11,7 @@
   pass glue_db_prefix the value of the glue_database_prefix terraform output
 
   this applies to every engine that reads the glue catalog, athena and spark
-  both, so the branch is on duckdb and not on one engine name
+  both, so the branch tests for duckdb
 #}
 {% macro generate_schema_name(custom_schema_name, node) -%}
   {%- if target.type == 'duckdb' -%}

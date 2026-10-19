@@ -220,7 +220,7 @@ class TestStaticReference:
 
     def test_sir_is_route_type_2_not_1(self):
         """It is operated as a subway but published as rail so anything that
-        says subway must test route_type rather than assume it
+        says subway must test route_type
         """
         from nyc_transit.gtfs.static_reference import ROUTES_BY_ID
 

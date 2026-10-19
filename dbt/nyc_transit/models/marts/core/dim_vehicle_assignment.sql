@@ -28,7 +28,7 @@
   of the schedule
   snap_route_alert_status is a snapshot since the mta overwrites alert text
 
-  rebuilt whole and not partition scoped like the facts beside it
+  rebuilt whole, unlike the partition scoped facts beside it
   a run boundary is defined by the observation before it and the interval is
   closed by the one after so a vehicles version numbering depends on its entire
   history
@@ -122,7 +122,7 @@ with_previous as (
 /*
   Mark the first observation of each distinct run A vehicle's very first
   observation has all-NULL previous values and scd2_change_detected is
-  NULL-safe so it is correctly flagged as a change rather than skipped
+  NULL-safe so a change into or out of NULL still registers
 */
 change_flags as (
 

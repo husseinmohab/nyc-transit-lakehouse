@@ -1,16 +1,14 @@
-# ---------------------------------------------------------------------------
-# Root module: wires the four child modules together.
+# Root module. Wires the child modules together.
 #
-# Dependency order is expressed through variable references rather than
-# depends_on, so Terraform can parallelise what is independent:
+# Dependency order comes from variable references, so Terraform can parallelise
+# what is independent:
 # s3_lakehouse  (no dependencies)
 # glue_catalog  (needs the warehouse location)
 # msk           (needs the VPC/subnets)
 # iam           (needs the bucket ARN, the Glue catalog id and the MSK ARN)
-# ---------------------------------------------------------------------------
 
-# Optional, because an existing VPC can be supplied instead. count rather than
-# a separate root module so one `terraform apply` still produces one stack.
+# Optional, since an existing VPC can be supplied. Using count here keeps one
+# `terraform apply` producing one stack.
 module "vpc" {
   source = "./modules/vpc"
   count  = var.create_network ? 1 : 0
@@ -90,10 +88,8 @@ module "iam" {
   tags                  = local.common_tags
 }
 
-# ---------------------------------------------------------------------------
 # Test harness. See modules/test_host for why this is not one of the three
 # production roles.
-# ---------------------------------------------------------------------------
 module "test_host" {
   source = "./modules/test_host"
   count  = var.create_test_host ? 1 : 0

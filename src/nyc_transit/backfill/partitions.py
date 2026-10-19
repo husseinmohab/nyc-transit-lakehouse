@@ -176,7 +176,7 @@ def plan_backfill(
 ) -> BackfillPlan:
     """build the full statement list for a backfill window
 
-    max_partitions is a blast radius guard and not a performance limit
+    max_partitions is a blast radius guard
     a fat fingered --start 2020-01-01 would otherwise queue 2000 partition rewrites
     92 is one quarter
     """
@@ -253,7 +253,7 @@ def run_backfill(
 ) -> dict[str, Any]:
     """run a plan one partition at a time
 
-    partition at a time and not all at once
+    one partition at a time
     a 30 day backfill that dies on day 17 leaves days 1-16 rebuilt and day 17
     untouched since its delete and insert are one iceberg transaction
     re running the window redoes 1-16 as equivalent replacements and carries on from

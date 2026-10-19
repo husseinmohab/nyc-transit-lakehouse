@@ -123,8 +123,8 @@ class TestLakehouseSettings:
         assert settings.checkpoint_for("q") == "s3a://b/cp/q"
 
     def test_iceberg_coordinate_is_scoped_to_the_spark_minor(self):
-        """The coordinate embeds the Spark minor version which is why
-        requirements/spark.txt pins pyspark rather than floating
+        """The coordinate embeds the Spark minor version, so
+        requirements/spark.txt pins pyspark to the 3.5 line
         """
         coordinate = LakehouseSettings(
             spark_major_minor="3.5", scala_version="2.12", iceberg_version="1.7.1"

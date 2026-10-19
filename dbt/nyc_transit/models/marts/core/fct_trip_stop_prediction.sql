@@ -26,7 +26,7 @@
   delete+insert on duckdb and merge on spark since the duckdb adapter has no
   merge strategy
   the incremental window is partition scoped so the two end up equivalent which
-  is exactly why it is partition scoped and not a > on a timestamp
+  is why it is partition scoped
 */
 
 with predictions as (
@@ -88,7 +88,7 @@ enriched as (
         end as horizon_bucket,
 
         -- Three-valued A cancellation carries no stop at all so "did the stop
-        -- resolve?" has no answer for it; collapsing that to false would make
+        -- resolve?" has no answer for it. Collapsing that to false would make
         -- every cancellation look like a broken join and permanently depress
         -- the join-coverage metric
         case

@@ -1,11 +1,8 @@
-# ---------------------------------------------------------------------------
 # MSK cluster for the GTFS-Realtime topics.
 #
-# Authentication is SASL/IAM only. Not SCRAM, and not unauthenticated:
-# SASL/IAM means the producer and the Spark jobs authenticate with the same
-# task role they already use for S3 and Glue, so there is no Kafka password
-# anywhere. Not in Secrets Manager, not in an env var, not in this repo.
-# ---------------------------------------------------------------------------
+# SASL/IAM is the only auth method, so the producer and the Spark jobs
+# authenticate with the same task role they already use for S3 and Glue and
+# there is no Kafka password to store anywhere.
 
 locals {
   # One broker per subnet, rounded to a multiple of the AZ count. MSK rejects a
@@ -45,7 +42,7 @@ locals {
     # received instead of recompressing them.
  compression.type=lz4
 
-    # Default retention; per-topic values in kafka_topics override this.
+    # Default retention. Per-topic values in kafka_topics override this.
  log.retention.hours=168
 
     # 1 GB segments: fewer, larger segments reduce open file handles, and
@@ -56,13 +53,13 @@ locals {
     # Durability. min.insync.replicas=2 with the producer's acks=all means a
     # write is acknowledged only once two replicas hold it, so a single broker
     # loss cannot lose an acknowledged record. Both values follow the broker
-    # count; see the locals block for why they cannot be constants.
+    # count. See the locals block for why they cannot be constants.
  min.insync.replicas=${local.min_insync_replicas}
  default.replication.factor=${local.default_replication_factor}
  unclean.leader.election.enable=false
 
     # The GTFS-RT payloads are small (~215 bytes/record) but the producer
-    # batches up to 10k messages; 2 MB leaves ample headroom.
+    # batches up to 10k messages and 2 MB leaves ample headroom.
  message.max.bytes=2097152
 
     # Consumer group stability: Spark micro-batches commit every 30s, so a
@@ -133,9 +130,7 @@ resource "aws_vpc_security_group_egress_rule" "all" {
   ip_protocol       = "-1"
 }
 
-# ---------------------------------------------------------------------------
 # Cluster configuration
-# ---------------------------------------------------------------------------
 resource "aws_msk_configuration" "this" {
   name           = local.config_name
   kafka_versions = [var.kafka_version]
@@ -144,7 +139,7 @@ resource "aws_msk_configuration" "this" {
   server_properties = local.server_properties
 
   lifecycle {
-    # MSK configurations are immutable once referenced by a cluster; a new one
+    # MSK configurations are immutable once referenced by a cluster, so a new one
     # must be created before the old is dropped.
     create_before_destroy = true
   }
@@ -164,7 +159,7 @@ resource "aws_msk_cluster" "this" {
       ebs_storage_info {
         volume_size = var.ebs_volume_size_gb
 
-        # Auto-scale storage rather than paging someone at 03:00 because a
+        # Auto-scale storage, so nobody gets paged at 03:00 because a
         # consumer lagged and the brokers filled up.
         provisioned_throughput {
           enabled = false
@@ -196,7 +191,7 @@ resource "aws_msk_cluster" "this" {
 
   # Broker-level JMX and node metrics. PER_TOPIC_PER_BROKER is what makes
   # per-topic consumer lag visible, which is the single most useful streaming
-  # metric; the cheaper DEFAULT level does not expose it.
+  # metric. The cheaper DEFAULT level does not expose it.
   enhanced_monitoring = "PER_TOPIC_PER_BROKER"
 
   open_monitoring {
@@ -268,7 +263,6 @@ data "aws_iam_policy_document" "msk_logs" {
   }
 }
 
-# ---------------------------------------------------------------------------
 # Topics
 #
 # The AWS provider has no aws_msk_topic resource: topics are a data-plane
@@ -276,7 +270,6 @@ data "aws_iam_policy_document" "msk_logs" {
 # created by a one-shot script that runs against the cluster, and the desired
 # state lives in the kafka_topics variable so it is still reviewable in a diff.
 # scripts/create_kafka_topics.sh is generated here with the exact values.
-# ---------------------------------------------------------------------------
 resource "local_file" "topic_script" {
   filename        = "${path.root}/generated/create_topics.sh"
   file_permission = "0755"

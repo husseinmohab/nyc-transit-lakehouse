@@ -1,17 +1,13 @@
-# ---------------------------------------------------------------------------
-# Network for the MSK cluster and whatever produces into it.
+# Network for the MSK cluster and the clients that produce into it.
 #
 # MSK brokers have no public endpoint when SASL/IAM is the only auth method, so
-# anything that talks to Kafka has to live in this VPC. That is the whole
-# reason this module exists.
+# anything that talks to Kafka has to live in this VPC.
 #
-# There is deliberately no NAT gateway. A NAT gateway is $0.045/hour plus
-# $0.045/GB and nothing in the private subnets needs to reach the internet:
-# the brokers only serve clients inside the VPC, and MSK ships its own broker
-# logs through the service rather than through the broker ENIs. Workloads that
-# do need egress (polling the MTA feeds, pulling jars) run in the public
-# subnets with a public IP instead.
-# ---------------------------------------------------------------------------
+# There is no NAT gateway. It runs $0.045/hour plus $0.045/GB and nothing in the
+# private subnets needs to reach the internet. The brokers only serve clients
+# inside the VPC and MSK ships its own broker logs through the service. The
+# workloads that do need egress, polling the MTA feeds and pulling jars, run in
+# the public subnets with a public IP.
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -51,7 +47,7 @@ resource "aws_subnet" "public" {
 
 # Private subnets: the brokers. No route to the internet gateway at all, which
 # is what makes "the brokers are not reachable from outside" a property of the
-# routing table rather than a claim about a security group.
+# routing table, not a claim about a security group.
 resource "aws_subnet" "private" {
   count = var.az_count
 

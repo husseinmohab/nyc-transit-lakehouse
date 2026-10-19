@@ -1,7 +1,7 @@
 {% snapshot snap_route_alert_status %}
 
 {#
-  file_format is declared here and not only in dbt_project.yml
+  file_format is declared here as well as in dbt_project.yml
   dbt-spark branches on target_relation.is_iceberg to decide where to put the
   snapshot's staging view since an iceberg catalog cannot hold a view at all
   without it the second run fails with "Replacing a view is not supported"
@@ -21,7 +21,7 @@
 /*
   scd2 history of each routes service status captured by dbt snapshot
 
-  strategy check and not timestamp
+  strategy check, since there is no reliable updated_at here
   alert_published_at moves whenever any alert on the route is republished even
   with identical content so a timestamp strategy would open a version every run
   the check columns are the four attributes whose change means something

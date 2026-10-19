@@ -8,7 +8,7 @@ sources:
       real Iceberg tables; against the `duckdb` target the identifiers resolve
       to the committed seeds, which are generated from the same canonical
       records by scripts/generate_dbt_seeds.py. The models are identical
-      either way, which is the point of the two targets.
+      either way, so both targets exercise the same models.
     schema: "{{ var('silver_schema', target.schema) }}"
     tables:
       - name: silver_trip_stop_predictions

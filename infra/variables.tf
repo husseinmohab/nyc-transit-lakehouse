@@ -92,9 +92,7 @@ variable "allowed_client_cidrs" {
   }
 }
 
-# ---------------------------------------------------------------------------
 # MSK sizing
-# ---------------------------------------------------------------------------
 variable "msk_kafka_version" {
   description = <<-EOT
     MSK no longer accepts Kafka versions below 3.8 for new clusters on standard
@@ -141,7 +139,7 @@ variable "kafka_topics" {
   }))
   default = {
     "mta.gtfs.trip_updates.v1" = {
-      # Trip updates are ~95% of the volume; 12 partitions lets 12 Spark tasks
+      # Trip updates are ~95% of the volume. 12 partitions lets 12 Spark tasks
       # consume in parallel, and the key (service_date|trip_id) has high enough
       # cardinality to spread evenly across them.
       partitions         = 12
@@ -154,7 +152,7 @@ variable "kafka_topics" {
       retention_hours    = 168
     }
     "mta.gtfs.alerts.v1" = {
-      # Very low volume; more partitions would only fragment ordering.
+      # Very low volume, so more partitions would only fragment ordering.
       partitions         = 3
       replication_factor = 3
       retention_hours    = 720 # 30 days: alerts are small and the history is useful
@@ -162,9 +160,7 @@ variable "kafka_topics" {
   }
 }
 
-# ---------------------------------------------------------------------------
 # Lakehouse storage
-# ---------------------------------------------------------------------------
 variable "lakehouse_bucket_name" {
   description = "S3 bucket for the Iceberg warehouse. Empty generates <project>-<environment>-lakehouse-<suffix>."
   type        = string
@@ -198,7 +194,7 @@ variable "glue_database_names" {
   description = "Glue databases, one per medallion layer."
   type        = list(string)
   # staging is here because dbt's staging models need a database of their own
-  # on the spark target; see dbt/nyc_transit/macros/generate_schema_name.sql.
+  # on the spark target. See dbt/nyc_transit/macros/generate_schema_name.sql.
   default = ["bronze", "silver", "marts", "snapshots", "staging"]
 }
 

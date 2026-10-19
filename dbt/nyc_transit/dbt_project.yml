@@ -32,12 +32,12 @@ vars:
 models:
   nyc_transit:
     # file_format is the dbt-spark key and table_type the dbt-athena one, both
-    # saying iceberg. table_type has to be a model config and not a profile
+    # saying iceberg. table_type has to be a model config, never a profile
     # key, otherwise dbt-athena assumes hive and refuses the merge strategy.
     +file_format: iceberg
     +table_type: iceberg
     staging:
-      # materialized is set per model and not here. Iceberg's SparkCatalog
+      # materialized is set per model. Iceberg's SparkCatalog
       # cannot hold a view at all, so the staging layer has to materialise on
       # spark, and `target` is only in scope inside a model's config block.
       +schema: staging
@@ -54,7 +54,7 @@ snapshots:
     # target_schema is used literally and does not pass through
     # generate_schema_name, so the glue database prefix has to be applied here
     # too or the snapshot looks for a database called plain "snapshots".
-    # env_var and not var: this file is rendered before CLI vars are merged, so
+    # env_var, since this file is rendered before CLI vars are merged, so
     # a var() here always falls back to its default.
     +target_schema: "{{ env_var('DBT_SNAPSHOT_SCHEMA', 'snapshots') }}"
     +file_format: iceberg
@@ -68,7 +68,7 @@ snapshots:
 # arrive as strings from protobuf). This is the single most load-bearing block
 # in this file.
 #
-# `string` and not `varchar`: both targets accept string, while Spark rejects a
+# `string`, because both targets accept it while Spark rejects a
 # bare varchar with DATATYPE_MISSING_SIZE and wants varchar(n).
 seeds:
   nyc_transit:

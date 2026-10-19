@@ -9,7 +9,7 @@
   it has no left() or right(), it rejects `cast(x as string)` and wants varchar,
   and it spells epoch conversion and date arithmetic differently
 
-  rather than branching inside every model the divergent expressions live here
+  the divergent expressions live here so no model has to branch
   the list is short on purpose, each macro is a place the engines differ
 #}
 

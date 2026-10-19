@@ -1,10 +1,6 @@
-# ---------------------------------------------------------------------------
-# Iceberg warehouse bucket + a separate bucket for MSK broker logs.
-#
-# Two buckets, not one prefix: broker logs are written by the MSK service
-# principal, and granting that principal write access to the warehouse bucket
-# just to collect logs would widen the warehouse's policy for no reason.
-# ---------------------------------------------------------------------------
+# Iceberg warehouse bucket plus a separate bucket for MSK broker logs.
+# The MSK service principal writes the broker logs, so keeping them in their own
+# bucket means the warehouse policy never has to grant it anything.
 
 resource "aws_s3_bucket" "lakehouse" {
   bucket = var.bucket_name
@@ -15,8 +11,8 @@ resource "aws_s3_bucket_ownership_controls" "lakehouse" {
   bucket = aws_s3_bucket.lakehouse.id
 
   rule {
-    # Disables ACLs entirely. Every access decision is then made by bucket
-    # policy and IAM, which is auditable; object ACLs are not.
+    # Disables ACLs entirely, so every access decision is made by bucket policy
+    # and IAM, which is auditable.
     object_ownership = "BucketOwnerEnforced"
   }
 }
@@ -59,7 +55,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "lakehouse" {
   depends_on = [aws_s3_bucket_versioning.lakehouse]
 
   # Bronze is the replay substrate: written once, read rarely, kept forever.
-  # IA after 90 days roughly halves its storage cost; it is NOT
+  # IA after 90 days roughly halves its storage cost. It is NOT
   # moved to Glacier, because the reason for bronze is that a backfill can
   # read it today without a restore request.
   rule {
@@ -76,7 +72,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "lakehouse" {
     }
   }
 
-  # Silver and marts are queried constantly; they stay in Standard. Only the
+  # Silver and marts are queried constantly so they stay in Standard. Only the
   # multipart-upload debris is cleaned up.
   rule {
     id     = "abort-incomplete-multipart-uploads"
@@ -128,9 +124,9 @@ resource "aws_s3_bucket_policy" "lakehouse_tls_only" {
 }
 
 data "aws_iam_policy_document" "lakehouse_tls_only" {
-  # Deny any request not over TLS. IAM policies grant; only a bucket policy
+  # Deny any request not over TLS. IAM policies grant. Only a bucket policy
   # can deny across every principal, including future ones, which is why this
-  # lives here rather than in modules/iam.
+  # lives here, not in modules/iam.
   statement {
     sid    = "DenyUnencryptedTransport"
     effect = "Deny"
@@ -155,9 +151,7 @@ data "aws_iam_policy_document" "lakehouse_tls_only" {
   }
 }
 
-# ---------------------------------------------------------------------------
 # MSK broker logs
-# ---------------------------------------------------------------------------
 resource "aws_s3_bucket" "logs" {
   bucket = "${var.name_prefix}-msk-logs-${substr(sha256(var.bucket_name), 0, 8)}"
   tags   = merge(var.tags, { Layer = "logs" })

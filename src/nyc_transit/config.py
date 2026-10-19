@@ -144,7 +144,7 @@ class LakehouseSettings(BaseSettings):
 
     # 1.7.1 crashes the jvm on a vectorized parquet read, a SIGSEGV inside
     # the jvm's own symbol tables that reproduces on both corretto and temurin
-    # 17, so it is the iceberg reader and not the jvm
+    # 17, so the fault is in the iceberg reader
     # 1.10.2 reads the same tables with vectorization left on
     iceberg_version: str = "1.10.2"
     spark_major_minor: str = "3.5"

@@ -62,7 +62,7 @@ class TestSparkOptions:
 
         security_protocol defaults to PLAINTEXT and msk only listens for iam on
         tls the failure is describeTopics timing out which reads like a network
-        problem rather than a protocol one
+        problem when it is a protocol one
         """
         monkeypatch.setenv("KAFKA_SASL_MECHANISM", "AWS_MSK_IAM")
         monkeypatch.setenv("KAFKA_AWS_REGION", "us-east-1")

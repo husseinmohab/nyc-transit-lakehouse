@@ -66,7 +66,7 @@ select
     -- Against the committed seeds this is always breached because the seeds are
     -- a fixed historical window and lag therefore grows forever that is correct
     -- on static data and it is why the dbt tests assert the shape of this table
-    -- (coverage, non-null, positive counts) rather than that lag is within SLA
+    -- (coverage, non-null, positive counts), leaving the SLA itself to the gate
     -- A test that can only pass on live data fails CI every day and gets
     -- deleted
     case

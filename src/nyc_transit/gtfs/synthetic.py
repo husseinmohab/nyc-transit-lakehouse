@@ -106,8 +106,8 @@ class SyntheticFeedConfig:
     def expected_records(self) -> tuple[int, int]:
         """rough min and max records per FeedMessage
 
-        rough and not a bound since a cancelled trip gives one row instead of
-        stops_per_trip rows
+        an estimate, not a bound, since a cancelled trip gives one row where a
+        live one gives stops_per_trip
         only used to log an order of magnitude
         rate control measures what actually came out
         """
@@ -149,7 +149,7 @@ class SyntheticFeedGenerator:
     ) -> list[str]:
         """a contiguous run of stops along one route in one direction
 
-        in route order and not a random sample
+        in route order
         a trip teleporting between boroughs would break anything that reasons about
         stop_sequence
         rng is the per trip generator so the path is reproducible from the trip id

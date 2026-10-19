@@ -264,7 +264,7 @@ jobs:
 
       - name: Import every DAG and assert the expected dag_ids
         # `DagBag` import is the real check: a DAG that raises at parse time is
-        # invisible in the Airflow UI rather than failing loudly, so this is
+        # invisible in the Airflow UI instead of failing loudly, so this is
         # the cheapest guard against a broken deploy.
         env:
           AIRFLOW__CORE__LOAD_EXAMPLES: "false"

@@ -8,8 +8,8 @@ so the producer needs a callback librdkafka invokes whenever the token is due
 tokens last about fifteen minutes and librdkafka refreshes on its own as long
 as the callback is registered
 
-nothing here reads an access key the chain resolves the instance profile or
-task role which is why modules/iam has no iam user in it
+nothing here reads an access key, the chain resolves the instance profile or
+task role, so modules/iam declares no iam user
 """
 
 from __future__ import annotations

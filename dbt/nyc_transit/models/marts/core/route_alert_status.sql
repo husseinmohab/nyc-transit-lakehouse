@@ -76,7 +76,7 @@ select
     -- alerts feed leaves effect and cause unset on every alert and puts the
     -- category in the header instead so the text is the fallback
     -- keying the snapshot on the header itself would version it every time
-    -- someone fixed a typo which is why this collapses to four coarse values
+    -- someone fixed a typo, so this collapses to four coarse values
     -- the phrases come from the wording the mta actually publishes
     -- 151 distinct live headers sorted 31 disrupted 84 degraded 36 notice
     -- where notice is almost all boarding and entrance information

@@ -1,7 +1,7 @@
 """great expectations suites built off the freshness slas
 
 the pure functions in freshness.py decide pass or fail
-ge adds three things hand rolled asserts do not
+ge adds what hand rolled asserts do not
 
 a uniform result per check with the observed value next to the threshold so on
 call sees lag was 612s against an sla of 420s instead of freshness check failed

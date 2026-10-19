@@ -9,7 +9,7 @@ select
     division,
     -- gtfs route_type 1 is subway and 2 is rail
     -- the staten island railway is type 2 even though it runs like a subway line
-    -- so anything claiming subway has to test route_type and not assume
+    -- so anything claiming subway has to test route_type
     case route_type
         when 1 then 'subway'
         when 2 then 'rail'

@@ -88,7 +88,7 @@ def to_silver_trip_predictions(bronze_df: DataFrame) -> DataFrame:
         F.col("arrival_uncertainty_seconds"),
         # Negative horizons are kept not clamped the MTA does publish
         # predictions for stops whose time has already passed and that is a
-        # measurable quality signal rather than bad data
+        # a measurable quality signal
         F.when(
             F.col("arrival_time_epoch").isNotNull(),
             (F.col("arrival_time_epoch") - feed_ts).cast("int"),

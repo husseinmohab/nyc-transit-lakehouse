@@ -206,7 +206,7 @@ models:
           - relationships:
               config:
                 severity: warn
-          # warn and not error. The realtime feeds name stop ids the static
+          # warn, never error. The realtime feeds name stop ids the static
           # stops.txt has no station for at all (R60, F17, R65, G25, H19, M07
           # were all live and all absent), so strict referential integrity is
           # not achievable against the real feed. Measured coverage is 99.07%.

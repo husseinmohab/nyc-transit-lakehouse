@@ -1,5 +1,5 @@
 /*
-  Join coverage asserted as a threshold rather than as 100%
+  Join coverage asserted as a threshold, not as 100%
 
   the stop seed holds every parent station in stops.txt so coverage is 100 on
   the committed seeds but the realtime feeds do name stop ids the static file

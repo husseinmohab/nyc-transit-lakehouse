@@ -5,7 +5,7 @@
 #
 # Nothing here is billable and nothing talks to AWS. MinIO stands in for S3 so
 # the s3a:// code path in src/nyc_transit/streaming/session.py is exercised
-# locally rather than skipped.
+# locally, never skipped.
 #
 # Kafka runs in KRaft mode (no Zookeeper): one fewer container, and it is what
 # MSK 3.6+ runs too.
@@ -74,7 +74,7 @@ services:
         condition: service_healthy
     # Partition counts mirror infra/variables.tf kafka_topics, scaled to a
     # single broker (replication-factor 1 instead of 3). Written out one topic
-    # per line rather than as a shell loop so the declaration is diffable
+    # per line, not as a shell loop, so the declaration is diffable
     # against the Terraform variable it mirrors.
     command:
       - bash
@@ -180,7 +180,7 @@ services:
       GTFS_POLL_INTERVAL_SECONDS: "15"
       PRODUCER_PRODUCER_ID: compose-producer-1
     # Polls the real MTA endpoints (no key needed for subway). Requires
-    # outbound internet; use the loadgen profile instead when offline.
+    # outbound internet. Use the loadgen profile when offline.
     command: gtfs-producer --target kafka
     profiles: ["live"]
 
@@ -245,7 +245,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__PARALLELISM: "8"
       # Local dev only. A real deployment generates this per environment and
-      # stores it in Secrets Manager; it is pinned here so Airflow does not
+      # stores it in Secrets Manager. It is pinned here so Airflow does not
       # invalidate its own connections on every container rebuild.
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-3Jbg8qZ4nQ7mYwRtVxKpL2sNfHcD5aEuW1oP9iU0jXk=}
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"

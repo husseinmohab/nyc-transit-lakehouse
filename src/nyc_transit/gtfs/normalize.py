@@ -13,7 +13,7 @@ every record carries an envelope
 event_id feed_id feed_timestamp ingest_timestamp
 streaming/dedup.py explains what the envelope is for
 
-three rules
+the rules
 
 normalize_feed_message is pure in FeedMessage feed_id and ingest_timestamp_ms so
 replaying a payload gives byte identical records
@@ -21,7 +21,7 @@ replaying a payload gives byte identical records
 a missing protobuf field becomes None and never 0 and never now
 a delay of 0 means the feed said 0
 
-service_date is a gtfs service date in new york time and not utc
+service_date is a gtfs service date in new york time, never utc
 a utc date would split one night of service across two partitions
 """
 
@@ -85,7 +85,7 @@ def parse_gtfs_start_date(raw: str) -> str | None:
 def make_event_id(*parts: Any) -> str:
     """deterministic 128 bit hex id over a records business key
 
-    blake2b not hash() which is salted per process and not uuid4 which is random
+    blake2b because hash() is salted per process and uuid4 is random
     this id is the merge dedup key so it has to be reproducible across processes and
     replays
 
@@ -477,8 +477,8 @@ def partition_key(record: dict[str, Any]) -> str:
         # the unit identity in preference order
         # gtfs vehicle id, then the nyct train id which is the only one the
         # subway feed gives, then the feed's entity id as a last resort
-        # entity_id works but is assigned by the feed and not the unit so it is
-        # the weakest of the three for an ordering key
+        # entity_id works but the feed assigns it, not the unit, so it makes the
+        # weakest ordering key here
         unit = record.get("vehicle_id") or record.get("nyct_train_id") or record.get("entity_id")
         return f"{record['service_date']}|{unit}"
     return f"alert|{record.get('entity_id')}"
