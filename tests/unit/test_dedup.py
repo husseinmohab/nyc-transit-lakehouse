@@ -13,8 +13,6 @@ from nyc_transit.streaming.dedup import (
     SILVER_VEHICLE_MERGE_KEY,
     MergeKey,
     dedup_within_batch_sql,
-    ledger_contains_sql,
-    ledger_insert_sql,
     merge_sql,
     partition_delete_sql,
 )
@@ -135,27 +133,6 @@ class TestDedupWithinBatch:
             select_columns=("alert_event_id", "informed_ordinal", "feed_timestamp_ms"),
         )
         assert "PARTITION BY alert_event_id, informed_ordinal" in sql
-
-
-class TestLedger:
-    def test_contains_query_escapes_single_quotes(self):
-        sql = ledger_contains_sql(
-            ledger_table="cat.bronze._stream_commits",
-            query_name="bad'name",
-            batch_id=7,
-            target="cat.bronze.trip_updates",
-        )
-        assert "bad''name" in sql
-
-    def test_batch_id_is_coerced_to_an_int(self):
-        """String interpolation of a batch id is an injection point"""
-        sql = ledger_contains_sql(ledger_table="l", query_name="q", batch_id=12, target="t")
-        assert "batch_id = 12" in sql
-
-    def test_insert_selects_from_the_staging_view(self):
-        sql = ledger_insert_sql(ledger_table="l", source_view="v")
-        assert sql.startswith("INSERT INTO l")
-        assert "FROM v" in sql
 
 
 class TestPartitionDelete:

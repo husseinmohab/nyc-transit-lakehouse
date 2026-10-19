@@ -58,8 +58,6 @@ class TestSpecs:
     def test_every_data_table_partitions_on_service_date(self):
         """Partition-scoped backfill depends on this"""
         for spec in ddl.ALL_SPECS:
-            if spec.name.startswith("_"):
-                continue  # the commit ledger partitions by query_name
             assert "service_date" in spec.partition_by, spec.name
 
     def test_every_column_has_a_comment(self):
@@ -170,12 +168,6 @@ class TestRenderedSql:
         statements = ddl.all_ddl("cat")
         for spec in ddl.ALL_SPECS:
             assert any(f"cat.{spec.namespace}.{spec.name} (" in s for s in statements)
-
-    def test_ledger_is_created_first(self):
-        """The writer reads it on the very first micro-batch"""
-        statements = ddl.all_ddl("cat")
-        tables = [s for s in statements if s.startswith("CREATE TABLE")]
-        assert "_stream_commits" in tables[0]
 
     @pytest.mark.parametrize("spec", ddl.ALL_SPECS, ids=lambda s: s.name)
     def test_every_spec_renders_without_error(self, spec):

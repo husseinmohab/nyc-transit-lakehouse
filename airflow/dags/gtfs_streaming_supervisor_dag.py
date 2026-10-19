@@ -3,16 +3,16 @@
 is the kafka to iceberg pipeline alive
 runs every 15 minutes
 
-check_streaming_queries reads the iceberg commit ledger and fails if a query has
-not committed inside STREAM_MAX_IDLE_MINUTES
+check_streaming_queries reads each iceberg table's snapshot history and fails if a
+query has not committed inside STREAM_MAX_IDLE_MINUTES
 freshness_gate runs the great expectations sla gate
 drain_available_now does a short trigger availableNow run that drains whatever is
 in kafka and exits
 
-the long running streaming queries are their own process and not an airflow task
+the long running streaming queries are their own process, not an airflow task
 docker compose up spark-streaming locally or an emr step or a kubernetes
 deployment in production
-airflow is a scheduler and not a process supervisor and a spark-submit held open
+airflow schedules, it does not supervise processes, and a spark-submit held open
 for days blocks a worker slot and dies with every scheduler restart
 the availableNow task is the safety net
 if that process is down this still advances the same checkpoint every 15 minutes

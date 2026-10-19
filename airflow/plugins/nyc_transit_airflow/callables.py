@@ -1,6 +1,6 @@
 """python callables the dags use
 
-kept in a plugin module instead of inline in the dag files for two reasons
+kept in a plugin module, not inline in the dag files
 the scheduler parses every dag file on a short interval so heavy imports like
 pyspark and great_expectations must not happen at module scope
 and a callable in a plain module is testable
@@ -52,37 +52,48 @@ def check_streaming_queries(**_context: Any) -> dict[str, Any]:
     invisible one so this makes the state explicit and fails loudly and the restart
     is a human call
 
-    health comes off the iceberg commit ledger and not the spark ui
-    the ledger is durable so it answers did this query commit anything recently even
-    after the driver died which is exactly when the spark ui is gone
+    health comes off each iceberg table's own snapshot history, which is durable
+    and survives the driver dying, unlike the spark ui
 
     airflow hands the task context to every callable and this probe wants none of it
     hence **_context
     """
     import nyc_transit.streaming.jobs as jobs
     from nyc_transit.config import load_settings
-    from nyc_transit.streaming.ddl import STREAM_COMMITS
     from nyc_transit.streaming.session import build_spark_session
 
     max_idle_minutes = int(os.environ.get("STREAM_MAX_IDLE_MINUTES", "15"))
     settings = load_settings()
-    ledger = settings.lakehouse.bronze(STREAM_COMMITS.name)
+    lake = settings.lakehouse
 
-    spark = build_spark_session(
-        settings.lakehouse, app_name="nyc-transit-supervisor", with_kafka=False
-    )
+    spark = build_spark_session(lake, app_name="nyc-transit-supervisor", with_kafka=False)
     try:
-        rows = spark.sql(f"""
-            SELECT query_name,
-                   max(committed_at) AS last_commit_at,
-                   sum(rows_written) AS rows_written
-            FROM {ledger}
-            GROUP BY query_name
-            """).collect()
+        observed: dict[str, Any] = {}
+        for job in jobs.JOBS:
+            tables = (
+                lake.bronze(job.bronze_spec.name),
+                lake.silver(job.silver_spec.name),
+            )
+            for table in tables:
+                row = spark.sql(f"""
+                    SELECT committed_at,
+                           CAST(summary['added-records'] AS BIGINT) AS added
+                    FROM {table}.snapshots
+                    ORDER BY committed_at DESC
+                    LIMIT 1
+                    """).collect()
+                seen = observed.setdefault(job.name, {"last_commit_at": None, "added": 0})
+                if not row:
+                    seen["last_commit_at"] = None
+                    continue
+                committed_at = row[0]["committed_at"]
+                seen["added"] = (seen["added"] or 0) + (row[0]["added"] or 0)
+                # the staler of the two tables decides the job's health
+                if seen["last_commit_at"] is None or committed_at < seen["last_commit_at"]:
+                    seen["last_commit_at"] = committed_at
     finally:
         spark.stop()
 
-    observed = {r["query_name"]: r for r in rows}
     report: dict[str, Any] = {"max_idle_minutes": max_idle_minutes, "queries": {}}
     unhealthy: list[str] = []
 
@@ -98,7 +109,7 @@ def check_streaming_queries(**_context: Any) -> dict[str, Any]:
         report["queries"][job.name] = {
             "status": status,
             "idle_minutes": round(idle_minutes, 1),
-            "rows_written": int(row["rows_written"] or 0),
+            "rows_written": int(row["added"] or 0),
         }
         if status == "stalled":
             unhealthy.append(f"{job.name}: idle {idle_minutes:.0f}m")

@@ -48,7 +48,6 @@ class TestGuardTargetTable:
             "bronze.trip_updates",
             "bronze.vehicle_positions",
             "bronze.alerts",
-            "bronze._stream_commits",
         ],
     )
     def test_refuses_every_bronze_table(self, forbidden):

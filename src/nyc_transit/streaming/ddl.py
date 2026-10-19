@@ -11,11 +11,11 @@ on v1 a merge rewrites whole data files on every micro batch
 merge-on-read means a merge touching a few rows writes a small delete file
 instead of rewriting a 128 mb parquet file
 the read amplification gets paid back by the weekly rewrite_data_files
-write.target-file-size-bytes is a compaction target and not what a micro batch
+write.target-file-size-bytes is a compaction target, not the size a micro batch
 produces
 distribution-mode hash gives one file per partition per batch instead of one per
 partition and task
-partitioning on service_date and not an ingest date since it is the column every
+partitioning on service_date, the column every
 backfill freshness check and query filters on
 """
 
@@ -69,7 +69,7 @@ class TableSpec:
 def _escape(text: str) -> str:
     """escape a string literal for spark sql
 
-    backslash escaping and not the sql standard doubled quote
+    backslash escaping, not the sql standard doubled quote
     sparks parser ends a literal at the first unescaped quote so vehicle''s clock
     parses as vehicle followed by a syntax error
     the backslash gets escaped first or an existing backslash would escape the quote
@@ -339,27 +339,7 @@ SILVER_ALERT_INFORMED_ENTITIES = TableSpec(
     ),
 )
 
-# Streaming commit ledger see nyc_transit.streaming.dedup for the contract
-STREAM_COMMITS = TableSpec(
-    name="_stream_commits",
-    namespace="bronze",
-    columns=(
-        ("query_name", "string", "logical streaming query name"),
-        ("batch_id", "bigint", "Structured Streaming micro-batch id"),
-        ("target_table", "string", "table the batch was merged into"),
-        ("rows_written", "bigint", "rows the batch merged"),
-        ("committed_at", "timestamp", "when the ledger row was written"),
-    ),
-    partition_by=("query_name",),
-    identifier_fields=("query_name", "batch_id", "target_table"),
-    comment=(
-        "Ledger of committed micro-batches. Lets a replayed batch be skipped "
-        "cheaply; correctness does not depend on it (the MERGE is idempotent)."
-    ),
-)
-
 ALL_SPECS: tuple[TableSpec, ...] = (
-    STREAM_COMMITS,
     BRONZE_TRIP_UPDATES,
     BRONZE_VEHICLE_POSITIONS,
     BRONZE_ALERTS,

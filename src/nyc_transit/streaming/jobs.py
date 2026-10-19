@@ -197,7 +197,6 @@ def start_query(
         spark=spark,
         query_name=job.name,
         targets=build_merge_targets(job, settings),
-        ledger_table=settings.lakehouse.bronze(ddl.STREAM_COMMITS.name),
     )
 
     stream = (

@@ -69,7 +69,7 @@ def trip_batch(spark, fixture_records):
     return _frame(spark, bronze_rows(fixture_records))
 
 
-def make_writer(spark, settings, *, with_ledger=True):
+def make_writer(spark, settings):
     from nyc_transit.streaming import ddl
     from nyc_transit.streaming.dedup import BRONZE_MERGE_KEY, SILVER_TRIP_MERGE_KEY
     from nyc_transit.streaming.transforms import to_bronze, to_silver_trip_predictions
@@ -95,7 +95,6 @@ def make_writer(spark, settings, *, with_ledger=True):
                 transform=lambda df: to_silver_trip_predictions(to_bronze(df)),
             ),
         ),
-        ledger_table=settings.bronze("_stream_commits") if with_ledger else None,
     )
 
 
@@ -161,13 +160,12 @@ class TestExactlyOnce:
         assert count(spark, silver) == before_silver
 
     def test_replay_under_a_new_batch_id_is_also_a_no_op(self, spark, iceberg_tables, trip_batch):
-        """The ledger is an optimisation not the guarantee
+        """The batch id is not part of the argument
 
-        Disable it and replay with different batch ids the MERGE alone must
-        still be idempotent If this fails the correctness story depends on a
-        non-atomic ledger write
+        Spark can hand the same content over under a new batch id after a
+        checkpoint is lost The MERGE keys on event_id so that is still a no-op
         """
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
         bronze = iceberg_tables.bronze("trip_updates")
         before = count(spark, bronze)
@@ -178,7 +176,7 @@ class TestExactlyOnce:
         assert count(spark, bronze) == before
 
     def test_event_ids_stay_unique_after_replay(self, spark, iceberg_tables, trip_batch):
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         for batch_id in range(3):
             writer(trip_batch, batch_id=batch_id)
 
@@ -192,7 +190,7 @@ class TestExactlyOnce:
         """Same business key newer feed timestamp one row newer value"""
         from pyspark.sql import functions as F
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         bronze = iceberg_tables.bronze("trip_updates")
 
         batch = _frame(spark, bronze_rows(fixture_records))
@@ -220,7 +218,7 @@ class TestExactlyOnce:
         """
         from pyspark.sql import functions as F
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         bronze = iceberg_tables.bronze("trip_updates")
 
         newer = _frame(spark, bronze_rows(fixture_records)).withColumn(
@@ -244,7 +242,7 @@ class TestExactlyOnce:
         """Iceberg's MERGE raises if two source rows match one target row, so
         the in-batch dedup is required not an optimisation
         """
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         rows = bronze_rows(fixture_records)
         writer(_frame(spark, rows + rows), batch_id=0)
 
@@ -253,7 +251,7 @@ class TestExactlyOnce:
     def test_in_batch_dedup_keeps_the_highest_version(self, spark, iceberg_tables, fixture_records):
         from pyspark.sql import functions as F
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         base = _frame(spark, bronze_rows(fixture_records)).withColumn(
             "arrival_delay_seconds", F.lit(10)
         )
@@ -276,52 +274,41 @@ class TestExactlyOnce:
         assert count(spark, iceberg_tables.bronze("trip_updates")) == 0
 
 
-class TestCommitLedger:
-    def test_records_a_row_per_committed_batch_and_target(self, spark, iceberg_tables, trip_batch):
-        writer = make_writer(spark, iceberg_tables)
-        writer(trip_batch, batch_id=0)
+class TestSupervisionSignal:
+    """The Airflow supervisor reads liveness off Iceberg's own snapshot history
 
-        ledger = iceberg_tables.bronze("_stream_commits")
-        rows = spark.sql(f"SELECT * FROM {ledger} ORDER BY target_table").collect()
-        assert len(rows) == 2  # bronze plus silver
-        assert {r["query_name"] for r in rows} == {"test_bronze_trip_updates"}
-        assert all(r["rows_written"] > 0 for r in rows)
+    It used to read a side table the writer maintained. These assert the
+    metadata table really carries what the probe asks for, since a typo in a
+    metadata column name would make a healthy pipeline look stalled.
+    """
 
-    def test_a_replayed_batch_is_skipped_without_touching_the_table(
+    def test_snapshot_history_carries_commit_time_and_added_records(
         self, spark, iceberg_tables, trip_batch
     ):
         writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
-        writer.history.clear()
-        writer(trip_batch, batch_id=0)
 
-        assert writer.history
-        assert all(stat.skipped_as_replay for stat in writer.history)
+        table = iceberg_tables.bronze("trip_updates")
+        rows = spark.sql(f"""
+            SELECT committed_at,
+                   CAST(summary['added-records'] AS BIGINT) AS added
+            FROM {table}.snapshots
+            ORDER BY committed_at DESC
+            LIMIT 1
+            """).collect()
 
-    def test_a_new_batch_id_is_not_skipped(self, spark, iceberg_tables, trip_batch):
-        writer = make_writer(spark, iceberg_tables)
-        writer(trip_batch, batch_id=0)
-        writer.history.clear()
-        writer(trip_batch, batch_id=1)
+        assert rows, "a committed merge must leave a snapshot"
+        assert rows[0]["committed_at"] is not None
+        assert rows[0]["added"] == trip_batch.count()
 
-        assert writer.history
-        assert not any(stat.skipped_as_replay for stat in writer.history)
+    def test_an_untouched_table_has_no_snapshots(self, spark, iceberg_tables):
+        """A table created but never written reports no commits
 
-    def test_a_broken_ledger_degrades_to_merging_anyway(self, spark, iceberg_tables, trip_batch):
-        """A missing ledger must not fail the write which would turn an
-        optimisation into an outage The MERGE is idempotent regardless
+        This is the no_commits branch of the supervisor probe.
         """
-        from nyc_transit.streaming.writer import IdempotentMergeWriter
-
-        writer = make_writer(spark, iceberg_tables)
-        broken = IdempotentMergeWriter(
-            spark=spark,
-            query_name=writer.query_name,
-            targets=writer.targets,
-            ledger_table=f"{iceberg_tables.catalog_name}.bronze.does_not_exist",
-        )
-        broken(trip_batch, batch_id=0)
-        assert count(spark, iceberg_tables.bronze("trip_updates")) == trip_batch.count()
+        table = iceberg_tables.silver("vehicle_positions")
+        rows = spark.sql(f"SELECT committed_at FROM {table}.snapshots").collect()
+        assert rows == []
 
 
 class TestPartitionScopedBackfill:
@@ -335,7 +322,7 @@ class TestPartitionScopedBackfill:
         """
         from nyc_transit.backfill.partitions import PartitionWindow, plan_backfill, run_backfill
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
 
         silver = iceberg_tables.silver("trip_stop_predictions")
@@ -366,7 +353,7 @@ class TestPartitionScopedBackfill:
     def test_backfill_is_idempotent(self, spark, iceberg_tables, trip_batch):
         from nyc_transit.backfill.partitions import PartitionWindow, plan_backfill, run_backfill
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
 
         silver = iceberg_tables.silver("trip_stop_predictions")
@@ -396,7 +383,7 @@ class TestPartitionScopedBackfill:
 
         from nyc_transit.backfill.partitions import PartitionWindow, plan_backfill, run_backfill
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         day_one = _frame(spark, bronze_rows(fixture_records))
         writer(day_one, batch_id=0)
 
@@ -433,7 +420,7 @@ class TestPartitionScopedBackfill:
         from nyc_transit.backfill.partitions import PartitionWindow, plan_backfill, run_backfill
         from nyc_transit.streaming import ddl
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
 
         silver = iceberg_tables.silver("trip_stop_predictions")
@@ -472,7 +459,7 @@ class TestFreshnessProbeAgainstIceberg:
         from nyc_transit.quality.freshness import SLAS_BY_TABLE
         from nyc_transit.quality.probe import observe_table
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
 
         observation = observe_table(
@@ -501,7 +488,7 @@ class TestFreshnessProbeAgainstIceberg:
         from nyc_transit.quality.freshness import SLAS_BY_TABLE
         from nyc_transit.quality.probe import observe_table
 
-        writer = make_writer(spark, iceberg_tables, with_ledger=False)
+        writer = make_writer(spark, iceberg_tables)
         writer(trip_batch, batch_id=0)
 
         bronze = iceberg_tables.bronze("trip_updates")

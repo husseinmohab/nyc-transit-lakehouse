@@ -1,15 +1,9 @@
-"""idempotent merge statements and the streaming commit ledger
+"""idempotent merge statements
 
 the pipeline is at least once delivery with idempotent keyed application which
 gives exactly once effects in the lakehouse
 kafka replays a micro batch with identical content and the merge below applies it
-by event_id so a replay is a no op
-
-the ledger in bronze._stream_commits lets a replayed batch get skipped without
-touching the data table
-it is a cost thing and not the correctness argument
-the ledger write is not atomic with the merge and the merge is idempotent either
-way
+by event_id so a replay lands the same rows
 """
 
 from __future__ import annotations
@@ -112,28 +106,6 @@ def dedup_within_batch_sql(
         f"         ) AS _rn\n"
         f"  FROM {source_view}\n"
         f") WHERE _rn = 1"
-    )
-
-
-def ledger_insert_sql(*, ledger_table: str, source_view: str) -> str:
-    """append a committed batch row to the ledger"""
-    return (
-        f"INSERT INTO {ledger_table} "
-        f"(query_name, batch_id, target_table, rows_written, committed_at) "
-        f"SELECT query_name, batch_id, target_table, rows_written, committed_at "
-        f"FROM {source_view}"
-    )
-
-
-def ledger_contains_sql(*, ledger_table: str, query_name: str, batch_id: int, target: str) -> str:
-    """has this query batch and target already committed"""
-    safe_query = query_name.replace("'", "''")
-    safe_target = target.replace("'", "''")
-    return (
-        f"SELECT count(*) AS n FROM {ledger_table} "
-        f"WHERE query_name = '{safe_query}' "
-        f"AND batch_id = {int(batch_id)} "
-        f"AND target_table = '{safe_target}'"
     )
 
 
