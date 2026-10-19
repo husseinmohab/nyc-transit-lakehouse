@@ -19,11 +19,17 @@ locals {
   # The broker defaults have to be coherent with how many brokers there are. A
   # default.replication.factor above the broker count is rejected, and a
   # min.insync.replicas of 2 on a single broker makes every acks=all produce
-  # hang. Three brokers gives the production pair (3 and 2), which is the
-  # broker-side half of the durability argument: a write is acknowledged only
-  # once two replicas hold it.
+  # hang.
+  #
+  # min.insync.replicas is replication factor minus one, never equal to it.
+  # Equal means any one broker going away stops writes, during a rolling
+  # update as much as during a failure, and AWS raises
+  # AWS_KAFKA_HIGH_RISK_CONFIG_RF_EQUALS_MINISR for it. Three brokers gives
+  # the production pair (3 and 2), which is the broker-side half of the
+  # durability argument: a write is acknowledged only once two replicas hold
+  # it, and one broker can still be lost.
   default_replication_factor = min(local.effective_brokers, 3)
-  min_insync_replicas        = local.default_replication_factor > 1 ? 2 : 1
+  min_insync_replicas        = max(local.default_replication_factor - 1, 1)
 
   server_properties = <<-PROPERTIES
     # Topics are declared in Terraform (see the kafka_topics variable). Letting
@@ -294,7 +300,7 @@ resource "local_file" "topic_script" {
       --partitions ${topic.partitions} \
       --replication-factor ${topic.replication_factor} \
       --config retention.ms=${topic.retention_hours * 3600 * 1000} \
-      --config min.insync.replicas=2 \
+      --config min.insync.replicas=${local.min_insync_replicas} \
       --config compression.type=lz4
     %{endfor~}
 
